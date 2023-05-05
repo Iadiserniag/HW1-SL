@@ -206,7 +206,7 @@ ypred <- predict(fun)
 ix <- sort(train$x, index.return=T)$ix
 lines(train$x[ix], ypred[ix], col='blue', lwd=2)
 
-# automated version -----------
+# automated version equispaced -----------
 
 # training set error -------------
 
@@ -239,17 +239,15 @@ errors
 # test
 
 qmin = 1
-qmax = 20
-D <- c(1, 2, 3)
+qmax = 50
+D <- 1:3
 Q <- qmin:qmax
-col1 <- rep(D, qmax)
-col2 <- unlist(lapply(Q, rep, d))
-combinations <- data.frame(cbind(col1, col2))
+combinations <- data.frame(expand.grid(D, Q))
 
 
 set.seed(123)
 rmse <- c(rep(NA, nrow(combinations)))
-models <- rep(NA, nrow(combinations))
+# models <- rep(NA, nrow(combinations))
 for(row in 1:nrow(combinations)){
   d = combinations[row, 1]
   q = combinations[row, 2]
@@ -269,19 +267,54 @@ for(row in 1:nrow(combinations)){
   colnames(data)[1] <- "y"
   model <- train(y ~., data = data, method = "lm",
                  trControl = train.control)
-  models[row] <- model # sistemare
   rmse[row] <- model[["results"]][["RMSE"]]
 }
 
 rmse
-combinations[which.min(rmse),]
+idx_min <- combinations[which.min(rmse),]
+idx_min
 min(rmse)
+
+# FUNCTION
+bestmodel <- function(qmax, dmax, train_x, train_y){
+  D <- 1:dmax
+  Q <- 1:qmax
+  combinations <- data.frame(expand.grid(D, Q))
+  rmse <- c(rep(NA, nrow(combinations)))
+  
+  for(row in 1:nrow(combinations)){
+    d = combinations[row, 1]
+    q = combinations[row, 2]
+    X <- matrix(0, n, d+q)
+    knots = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
+    for(i in 1:d){
+      X[,i] <- (train_x)**i
+    }
+    for(j in 1:q){
+      idx = d+j
+      X[,idx] <- pmax(0, train_x - rep(knots[j], n))**d
+    }
+    train.control <- trainControl(method = "cv", 
+                                  number = 10)
+    # Train the model
+    data <- data.frame(cbind(train_y, X))
+    colnames(data)[1] <- "y"
+    model <- train(y ~., data = data, method = "lm",
+                   trControl = train.control)
+    rmse[row] <- model[["results"]][["RMSE"]]
+  }
+  idx_min <- combinations[which.min(rmse),]
+  return(idx_min)
+}
+
+set.seed(123)
+bestmodel(10, 3, train$x, train$y)
 
 
 # plot -----------
 
-d = 1
-q = 9
+d = idx_min[[1]]
+q = idx_min[[2]]
 X <- matrix(0, n, d+q)
 knots = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
 for(i in 1:d){
@@ -303,4 +336,12 @@ plot(train$x, train$y)
 ypred <- predict(model)
 ix <- sort(train$x, index.return=T)$ix
 lines(train$x[ix], ypred[ix], col='red', lwd=2)
+
+# Quantile based knots -------
+
+# Maximum curvature-based knots ----------
+
+# Hierarchical clustering knots ----------
+
+
 
