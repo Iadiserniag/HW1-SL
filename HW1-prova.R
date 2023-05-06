@@ -275,8 +275,10 @@ idx_min <- combinations[which.min(rmse),]
 idx_min
 min(rmse)
 
+
 # FUNCTION
-bestmodel <- function(qmax, dmax, train_x, train_y){
+
+bestmodel <- function(qmax=1, dmax=1, train_x, train_y){
   D <- 1:dmax
   Q <- 1:qmax
   combinations <- data.frame(expand.grid(D, Q))
@@ -308,8 +310,55 @@ bestmodel <- function(qmax, dmax, train_x, train_y){
 }
 
 set.seed(123)
-bestmodel(10, 3, train$x, train$y)
+idx_min <- bestmodel(50, 3, train$x, train$y)
 
+
+
+
+# best model
+
+d = 1
+q = 9
+n = nrow(train)
+X <- matrix(0, n, d+q)
+knots = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
+for(i in 1:d){
+  X[,i] <- (train$x)**i
+}
+for(j in 1:q){
+  idx = d+j
+  X[,idx] <- pmax(0, train$x - rep(knots[j], n))**d
+}
+
+
+ntest = nrow(test)
+Xtest <- matrix(0, ntest, d+q)
+knots = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
+for(i in 1:d){
+  Xtest[,i] <- (test$x)**i
+}
+for(j in 1:q){
+  idx = d+j
+  Xtest[,idx] <- pmax(0, test$x - rep(knots[j], ntest))**d
+}
+
+
+train_data <- data.frame(cbind(X, train$y))
+colnames(train_data)[ncol(train_data)] <- "y"
+test_data <- data.frame(Xtest)
+mod <- lm(y ~ X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = train_data)
+sd(mod$residuals)
+y_pred <- predict(mod, newdata = test_data)
+y <- data.frame(y_pred)
+colnames(y)[1] <- "target"
+df <- data.frame(cbind("id"=test$id, y))
+
+# prova <- train_data[,-ncol(train_data)]
+
+plot(train$x, train$y)
+points(test$x, y_pred, col = "red")
+
+write.csv(df, 'submission1.csv', row.names = F)
 
 # plot -----------
 
@@ -337,11 +386,20 @@ ypred <- predict(model)
 ix <- sort(train$x, index.return=T)$ix
 lines(train$x[ix], ypred[ix], col='red', lwd=2)
 
+# +Regularization ----------
+
 # Quantile based knots -------
 
 # Maximum curvature-based knots ----------
 
+# install.packages("pracma")
+library(pracma)
+
+gradient <- grad(train$x, train$y)
+
+print(gradient)
+
 # Hierarchical clustering knots ----------
 
-
+# Nested CV -----------------
 
