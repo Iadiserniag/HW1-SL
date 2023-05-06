@@ -433,9 +433,9 @@ bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi
     q = combinations[row, 2]
     knots = knots_pos[[q]]
     X <- remap(d, q, knots, train_x)
-    cv.out = cv.glmnet(X, y, alpha = alpha, nfolds = 10) 
+    cv.out = cv.glmnet(X, train_y, alpha = alpha, nfolds = 10) 
     bestlam = cv.out$lambda.min
-    mod = glmnet(X, y, alpha = 0, lambda = bestlam)
+    mod = glmnet(X, train_y, alpha = 0, lambda = bestlam)
     y_pred = predict(mod, newx = X)
     
     rmse[row] <- sqrt(mean((train_y - y_pred)^2))
@@ -448,7 +448,7 @@ bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi
 ## Quantile based knots -------
 
 set.seed(123)
-res = bestmodel_pos(10, 3, x, y, 1, 'quantile')
+res = bestmodel_pos(10, 3, train$x, train$y, 1, 'quantile')
 
 idx_min = res[[1]]
 d = idx_min$Var1
@@ -469,6 +469,10 @@ points(test$x, y_pred, col = "red")
 
 ## Maximum curvature-based knots ----------
 
+library(Thermimage)
+
+prova <- slopeEveryN(train$x, n = 2)
+
 # install.packages("pracma")
 library(pracma)
 
@@ -485,6 +489,103 @@ curvature <- curvatures(x, y)
 max_curv <- x[which.max(curvature)]
 
 ## Hierarchical clustering knots ----------
+
+# Hierarchical clustering is a useful technique to choose knots
+# for spline regression. The basic idea is to cluster the data points
+# based on their pairwise distance and choose the cluster centers as
+# the knots for the spline.
+
+# Perform hierarchical clustering on the data
+d <- dist(train$y)
+hc <- hclust(d)
+
+# Determine the number of clusters
+k <- 10
+hc_labels <- cutree(hc, k = k)
+hc_labels
+# Choose cluster centers as knots for the spline
+knots <- numeric(k)
+for (i in 1:k) {
+  knots[i] <- mean(train$x[hc_labels == i])
+}
+
+knots <- unlist(lapply(1:k, function(i)mean(train$x[hc_labels == i])))
+
+# Fit the spline with the chosen knots
+X <- remap(3, k, knots, train$x)
+mod <- lm(train$y ~ X)
+y_pred <- predict(mod)
+
+# Plot the results
+plot(train$x, train$y, main = "Spline with Hierarchical Clustering Knots")
+points(train$x, y_pred, col = "red")
+abline(v=knots)
+sort(knots)
+
+
+## Function -----------
+
+# pos can assume values equi (default), quantile, maxcurve?, cluster
+bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi'){
+  D <- 1:dmax
+  Q <- 1:qmax
+  combinations <- data.frame(expand.grid(D, Q))
+  rmse <- c(rep(NA, nrow(combinations)))
+  knots_pos <- list()
+  features <- list()
+  if(pos == 'equi'){
+    knots_pos = lapply(Q, function(q)seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))
+  }
+  if(pos == 'quantile'){
+    knots_pos = lapply(Q, function(q) unname(quantile(train_x,
+                                                      probs = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))))
+  }
+  for(row in 1:nrow(combinations)){
+    d = combinations[row, 1]
+    q = combinations[row, 2]
+    if(pos == 'cluster'){
+      dist <- dist(train_y)
+      hc <- hclust(dist)
+      hc_labels <- cutree(hc, k = q)
+      knots <- sort(unlist(lapply(1:q, function(i) mean(train_x[hc_labels == i]))))
+      knots_pos[[q]] <- knots
+    }
+    else{
+      knots <- knots_pos[[q]]
+    }
+    X <- remap(d, q, knots, train_x)
+    cv.out = cv.glmnet(X, train_y, alpha = alpha, nfolds = 10) 
+    bestlam = cv.out$lambda.min
+    mod = glmnet(X, train_y, alpha = alpha, lambda = bestlam)
+    y_pred = predict(mod, newx = X)
+    rmse[row] <- sqrt(mean((train_y - y_pred)^2))
+    features <- append(features, list(X))
+  }
+  idx_min <- combinations[which.min(rmse),]
+  return(list(idx_min, features, rmse, knots_pos))
+}
+
+
+res = bestmodel_pos(30, 3, train$x, train$y, 1, 'cluster')
+
+idx_min = res[[1]]
+d = idx_min$Var1
+q = idx_min$Var2
+X = res[[2]][[as.integer(rownames(idx_min))]]
+knots = res[[4]][[q]]
+
+Xtest = remap(d, q, knots, test$x)
+train_data <- data.frame(cbind(X, "y" = train$y))
+test_data <- data.frame(Xtest)
+colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
+
+mod <- lm(y ~ ., data = train_data)
+y_pred <- predict(mod, newdata = test_data)
+y_train <- predict(mod)
+
+plot(train$x, train$y)
+points(test$x, y_pred, col = "red")
+points(train$x, y_train, col = "blue")
 
 # Nested CV -----------------
 
