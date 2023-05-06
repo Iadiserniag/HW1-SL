@@ -554,7 +554,8 @@ bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi
       knots <- knots_pos[[q]]
     }
     X <- remap(d, q, knots, train_x)
-    cv.out = cv.glmnet(X, train_y, alpha = alpha, nfolds = 10) 
+    alpha_grid <- seq(0, 1, by=0.1)
+    cv.out = cv.glmnet(X, train_y, alpha = alpha, nfolds = 5) 
     bestlam = cv.out$lambda.min
     mod = glmnet(X, train_y, alpha = alpha, lambda = bestlam)
     y_pred = predict(mod, newx = X)
@@ -565,14 +566,16 @@ bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi
   return(list(idx_min, features, rmse, knots_pos))
 }
 
-
-res = bestmodel_pos(30, 3, train$x, train$y, 1, 'cluster')
+# instead of getting the values which minimize (close to min define a closeness)
+# TOLERANCE
+res = bestmodel_pos(30, 5, train$x, train$y, 0.5, 'cluster')
 
 idx_min = res[[1]]
 d = idx_min$Var1
 q = idx_min$Var2
 X = res[[2]][[as.integer(rownames(idx_min))]]
 knots = res[[4]][[q]]
+rmse = res[[3]][142]
 
 Xtest = remap(d, q, knots, test$x)
 train_data <- data.frame(cbind(X, "y" = train$y))
@@ -584,8 +587,16 @@ y_pred <- predict(mod, newdata = test_data)
 y_train <- predict(mod)
 
 plot(train$x, train$y)
-points(test$x, y_pred, col = "red")
 points(train$x, y_train, col = "blue")
+points(test$x, y_pred, col = "red")
+abline(v=knots)
+
+file <- read.csv('submission1.csv')
+file$target_new <- y_pred
+file$x <- test$x
+
+abline(h = seq(-2000, 10000, 1000))
+abline(v = seq(0, 1, 0.1), col = "red")
 
 # Nested CV -----------------
 
