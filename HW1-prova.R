@@ -1,4 +1,8 @@
+# import modules --------
 library(caret)
+library(glmnet)
+library(elasticnet)
+library(pracma)
 
 train <- read.csv('train.csv')
 test <- read.csv('test.csv')
@@ -238,43 +242,6 @@ errors
 # validation
 # test
 
-qmin = 1
-qmax = 50
-D <- 1:3
-Q <- qmin:qmax
-combinations <- data.frame(expand.grid(D, Q))
-
-
-set.seed(123)
-rmse <- c(rep(NA, nrow(combinations)))
-# models <- rep(NA, nrow(combinations))
-for(row in 1:nrow(combinations)){
-  d = combinations[row, 1]
-  q = combinations[row, 2]
-  X <- matrix(0, n, d+q)
-  knots = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
-  for(i in 1:d){
-    X[,i] <- (train$x)**i
-  }
-  for(j in 1:q){
-    idx = d+j
-    X[,idx] <- pmax(0, train$x - rep(knots[j], n))**d
-  }
-  train.control <- trainControl(method = "cv", 
-                                number = 10)
-  # Train the model
-  data <- data.frame(cbind(train$y, X))
-  colnames(data)[1] <- "y"
-  model <- train(y ~., data = data, method = "lm",
-                 trControl = train.control)
-  rmse[row] <- model[["results"]][["RMSE"]]
-}
-
-rmse
-idx_min <- combinations[which.min(rmse),]
-idx_min
-min(rmse)
-
 
 # FUNCTION
 
@@ -306,13 +273,11 @@ bestmodel <- function(qmax=1, dmax=1, train_x, train_y){
     rmse[row] <- model[["results"]][["RMSE"]]
   }
   idx_min <- combinations[which.min(rmse),]
-  return(idx_min)
+  return(list(idx_min, X, rmse))
 }
 
 set.seed(123)
 idx_min <- bestmodel(50, 3, train$x, train$y)
-
-
 
 
 # best model
@@ -343,14 +308,12 @@ for(j in 1:q){
 }
 
 
-train_data <- data.frame(cbind(X, train$y))
-colnames(train_data)[ncol(train_data)] <- "y"
+train_data <- data.frame(cbind(X, "y" = train$y))
 test_data <- data.frame(Xtest)
 mod <- lm(y ~ X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = train_data)
 sd(mod$residuals)
 y_pred <- predict(mod, newdata = test_data)
-y <- data.frame(y_pred)
-colnames(y)[1] <- "target"
+y <- data.frame("target" = y_pred)
 df <- data.frame(cbind("id"=test$id, y))
 
 # prova <- train_data[,-ncol(train_data)]
@@ -360,7 +323,7 @@ points(test$x, y_pred, col = "red")
 
 write.csv(df, 'submission1.csv', row.names = F)
 
-# plot -----------
+## plot -----------
 
 d = idx_min[[1]]
 q = idx_min[[2]]
@@ -386,20 +349,142 @@ ypred <- predict(model)
 ix <- sort(train$x, index.return=T)$ix
 lines(train$x[ix], ypred[ix], col='red', lwd=2)
 
-# +Regularization ----------
+# Regularization ----------
 
-# Quantile based knots -------
+library(glmnet)
 
-# Maximum curvature-based knots ----------
+# function
+bestmodel_reg <- function(qmax=1, dmax=1, train_x, train_y, alpha=0){
+  D <- 1:dmax
+  Q <- 1:qmax
+  combinations <- data.frame(expand.grid(D, Q))
+  rmse <- c(rep(NA, nrow(combinations)))
+  for(row in 1:nrow(combinations)){
+    d = combinations[row, 1]
+    q = combinations[row, 2]
+    X <- matrix(0, n, d+q)
+    knots = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
+    for(i in 1:d){
+      X[,i] <- (train_x)**i
+    }
+    for(j in 1:q){
+      idx = d+j
+      X[,idx] <- pmax(0, train_x - rep(knots[j], n))**d
+    }
+    cv.out = cv.glmnet(X, y, alpha = alpha, nfolds = 10) 
+    bestlam = cv.out$lambda.min
+    mod = glmnet(X, y, alpha = 0, lambda = bestlam)
+    y_pred = predict(mod, newx = X)
+    
+    rmse[row] <- sqrt(mean((train_y - y_pred)^2))
+  }
+  idx_min <- combinations[which.min(rmse),]
+  return(list(idx_min, X, rmse))
+}
+
+## ridge regression --------------
+x <- train$x
+y <- train$y
+
+set.seed(123)
+bestmodel_reg(50, 3, x, y, 0)
+
+## lasso regression --------------
+res = bestmodel_reg(10, 5, x, y, 1)
+
+## elastic net (una via di mezzo tra ridge e lasso regression) ---------------
+bestmodel_reg(10, 3, x, y, 0.5)
+
+# tutti uguali, ma il modello fa piu schifo hahah
+
+
+# NOT equispaced + Regularization -----------
+
+remap <- function(d, q, knots, x){
+  n = length(x)
+  X <- matrix(0, n, d+q)
+  knots = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
+  for(i in 1:d){
+    X[,i] <- (x)**i
+  }
+  for(j in 1:q){
+    idx = d+j
+    X[,idx] <- pmax(0, x - rep(knots[j], n))**d
+  }
+  return(X)
+}
+
+# pos can assume values equi (default), quantile, maxcurve
+bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi'){
+  D <- 1:dmax
+  Q <- 1:qmax
+  combinations <- data.frame(expand.grid(D, Q))
+  rmse <- c(rep(NA, nrow(combinations)))
+  features <- list()
+  if(pos == 'equi'){
+    knots_pos = lapply(Q, function(q)seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))
+  }
+  if(pos == 'quantile'){
+    knots_pos = lapply(Q, function(q) unname(quantile(train_x,
+                                                      probs = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))))
+  }
+  for(row in 1:nrow(combinations)){
+    d = combinations[row, 1]
+    q = combinations[row, 2]
+    knots = knots_pos[[q]]
+    X <- remap(d, q, knots, train_x)
+    cv.out = cv.glmnet(X, y, alpha = alpha, nfolds = 10) 
+    bestlam = cv.out$lambda.min
+    mod = glmnet(X, y, alpha = 0, lambda = bestlam)
+    y_pred = predict(mod, newx = X)
+    
+    rmse[row] <- sqrt(mean((train_y - y_pred)^2))
+    features <- append(features, list(X))
+  }
+  idx_min <- combinations[which.min(rmse),]
+  return(list(idx_min, features, rmse, knots_pos))
+}
+
+## Quantile based knots -------
+
+set.seed(123)
+res = bestmodel_pos(10, 3, x, y, 1, 'quantile')
+
+idx_min = res[[1]]
+d = idx_min$Var1
+q = idx_min$Var2
+X = res[[2]][[as.integer(rownames(idx_min))]]
+knots = res[[4]][[q]]
+
+Xtest = remap(d, q, knots, test$x)
+
+train_data <- data.frame(cbind(X, "y" = train$y))
+test_data <- data.frame(Xtest)
+colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
+mod <- lm(y ~ ., data = train_data)
+y_pred <- predict(mod, newdata = test_data) 
+
+plot(x, y)
+points(test$x, y_pred, col = "red")
+
+## Maximum curvature-based knots ----------
 
 # install.packages("pracma")
 library(pracma)
 
-gradient <- grad(train$x, train$y)
+library(numDeriv)
 
-print(gradient)
+grad_norms <- sapply(x, function(x) sqrt(sum(gradient(train_data, x = x)^2)))
 
-# Hierarchical clustering knots ----------
+gradient(train$y)
+
+# Calculate the curvatures
+curvature <- curvatures(x, y)
+
+# Find the x values of the local maximum curvatures
+max_curv <- x[which.max(curvature)]
+
+## Hierarchical clustering knots ----------
 
 # Nested CV -----------------
 
