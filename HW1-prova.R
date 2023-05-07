@@ -568,14 +568,16 @@ bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi
 
 # instead of getting the values which minimize (close to min define a closeness)
 # TOLERANCE
-res = bestmodel_pos(30, 5, train$x, train$y, 0.5, 'cluster')
+res = bestmodel_pos(20, 3, train$x, train$y, 0.5, 'cluster')
 
 idx_min = res[[1]]
 d = idx_min$Var1
 q = idx_min$Var2
 X = res[[2]][[as.integer(rownames(idx_min))]]
 knots = res[[4]][[q]]
-rmse = res[[3]][142]
+rmse = res[[3]][57]
+res[[3]]
+
 
 Xtest = remap(d, q, knots, test$x)
 train_data <- data.frame(cbind(X, "y" = train$y))
@@ -591,6 +593,11 @@ points(train$x, y_train, col = "blue")
 points(test$x, y_pred, col = "red")
 abline(v=knots)
 
+y <- data.frame("target" = y_pred)
+df <- data.frame(cbind("id"=test$id, y))
+write.csv(df, 'submission2.csv', row.names = F)
+
+
 file <- read.csv('submission1.csv')
 file$target_new <- y_pred
 file$x <- test$x
@@ -600,3 +607,39 @@ abline(v = seq(0, 1, 0.1), col = "red")
 
 # Nested CV -----------------
 
+# YOUR JOB - PART2 --------------------
+
+'''Develop your own implementation of the truncated power basis Gd,q, and then plot a few elements with d ∈ {1, 3} and
+q ∈ {3, 10} equispaced knots in the open interval (0, 1).'''
+
+#quanti coefficienti ci servono? d + 1 + q 
+
+linear <- function(x, q){
+  num_coeff <- d + 2
+  
+}
+
+knots <- create_knots(3)
+linear_function <- function(x, knots){
+  out <- 1 + x
+  for(knot in knots){
+    out <- out + pmax((x - knot), 0)*runif(1, min = 0, max = 30)
+  }
+  return(out)
+}
+
+curve(linear_function(x, knots = knots))
+abline(v = knots)
+
+
+knots <- create_knots(10)
+cubic_function <- function(x, knots){
+  out <- 1 + x + x*2 + x*3
+  for(knot in knots){
+    out <- out + (pmax((x - knot), 0)**3)*runif(1, min = 0, max = 30)
+  }
+  return(out)
+}
+
+
+curve(cubic_function(x, knots=knots)); abline(v = knots, lty = 2)
