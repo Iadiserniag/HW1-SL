@@ -643,3 +643,89 @@ cubic_function <- function(x, knots){
 
 
 curve(cubic_function(x, knots=knots)); abline(v = knots, lty = 2)
+                                  
+# plots code
+set.seed(12345)
+
+linear <- function(x, q){
+  num_coeff <- d + 2
+  
+}
+
+q <- 3
+knots3 <- seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
+
+linear_function <- function(x, knots){
+  out <- 1 + x
+  for(knot in knots){
+    out <- out + pmax((x - knot), 0)*runif(1, min = 0, max = 30)
+  }
+  return(out)
+}
+
+cubic_function <- function(x, knots){
+  out <- 1 + x + x*2 + x*3
+  for(knot in knots){
+    out <- out + (pmax((x - knot), 0)**3)*runif(1, min = 0, max = 30)
+  }
+  return(out)
+}
+x<- seq(0, 1, 0.001)
+
+curve(linear_function(x, knots = knots3), xlim = c(0, 1), ylim = c(0, 40),
+      xlab = "x", ylab = "y", main = paste('Power Functions with 3 knots'), type = "l", col='coral', lwd=3)
+
+points(x, cubic_function(x, knots=knots), type = "l", col='mediumorchid', lwd=3, xlab = "x", ylab = expression(y), cex.main = 0.6)
+
+
+# Add vertical lines for knots
+abline(v = knots3, lty=2)
+for (i in 1:(length(knots3) + 1)) {
+  if (i %% 2 == 1) {
+    col <- rgb(0.847, 0.749, 0.847, alpha = 0.3)  
+  } else {
+    col <- rgb(0.729, 0.333, 0.827, alpha = 0.2)  
+  }
+  
+  if (i == 1) {
+    rect(0, 0, knots3[i], 40, col = col, border = NA)
+  } else if (i == length(knots3) + 1) {
+    rect(knots3[i - 1], 0, 1, 40, col = col, border = NA)
+  } else {
+    rect(knots3[i - 1], 0, knots3[i], 40, col = col, border = NA)
+  }
+}
+
+
+legend(x = 0.02, y = 39, legend = c("Linear Function", "Cubic Function"), col = c("darkorange", "mediumorchid"), lty = 1, lwd = 2, cex=0.8, box.lty=0)
+
+q <- 10
+knots10 <- seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
+
+curve(linear_function(x, knots = knots10), xlim = c(0, 1), ylim = c(0, 80),
+      xlab = "x", ylab = "y", main = paste('Power Functions with 10 knots'), type = "l", col='cornflowerblue', lwd=3)
+
+points(x, cubic_function(x, knots=knots10), type = "l", col='purple', lwd=3, xlab = "x", ylab = expression(y), cex.main = 0.6)
+
+
+# Add vertical lines for knots
+abline(v = knots10, lty=2)
+
+for (i in 1:(length(knots10) + 1)) {
+  if (i %% 2 == 1) {
+    col <- rgb(0.901, 0.901, 0.980, alpha = 0.3)  
+  } else {
+    col <- rgb(0.529, 0.808, 0.980, alpha = 0.2)
+  }
+  
+  if (i == 1) {
+    rect(0, 0, knots10[i], 80, col = col, border = NA)
+  } else if (i == length(knots10) + 1) {
+    rect(knots10[i - 1], 0, 1, 80, col = col, border = NA)
+  } else {
+    rect(knots10[i - 1], 0, knots10[i], 80, col = col, border = NA)
+  }
+}
+
+legend(x = 0.02, y = 77, legend = c("Linear Function", "Cubic Function"), col = c("cornflowerblue", "purple"), lty = 1, lwd = 2, cex=0.8, box.lty=0)
+
