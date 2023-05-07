@@ -2,7 +2,8 @@
 library(caret)
 library(glmnet)
 library(elasticnet)
-library(pracma)
+library(doMC)
+
 
 train <- read.csv('train.csv')
 test <- read.csv('test.csv')
@@ -282,6 +283,8 @@ idx_min <- bestmodel(50, 3, train$x, train$y)
 
 # best model
 
+# Submission 1 ---------------------------
+
 d = 1
 q = 9
 n = nrow(train)
@@ -473,20 +476,33 @@ library(Thermimage)
 
 prova <- slopeEveryN(train$x, n = 2)
 
-# install.packages("pracma")
-library(pracma)
+# create some example data
+x <- seq(0, 10, length.out = 101)
+y <- sin(x) + rnorm(length(x), 0, 0.1)
 
-library(numDeriv)
+# compute the curvature of the data
+curv <- curvature(x, y)
 
-grad_norms <- sapply(x, function(x) sqrt(sum(gradient(train_data, x = x)^2)))
+curvature(train$x)
 
-gradient(train$y)
+# find the indices of the maximum curvature points
+max_idx <- which(curv$curvature == max(curv$curvature))
 
-# Calculate the curvatures
-curvature <- curvatures(x, y)
+# extract the x and y values at the maximum curvature points
+x_max_curv <- curv$x[max_idx]
+y_max_curv <- curv$y[max_idx]
 
-# Find the x values of the local maximum curvatures
-max_curv <- x[which.max(curvature)]
+# plot the data and the maximum curvature points
+plot(x, y, type = "l")
+points(x_max_curv, y_max_curv, col = "red", pch = 20, cex = 2)
+
+
+
+
+
+
+
+
 
 ## Hierarchical clustering knots ----------
 
@@ -523,9 +539,16 @@ abline(v=knots)
 sort(knots)
 
 
-## Function -----------
+## Functions -----------
+
+# The spline has four parameters on each of the K+1 regions minus three
+# constraints for each knot, resulting in a K+4 degrees of freedom.
+
+## Submission 2 -----------------------
 
 # pos can assume values equi (default), quantile, maxcurve?, cluster
+
+set.seed(123)
 bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi'){
   D <- 1:dmax
   Q <- 1:qmax
@@ -554,103 +577,230 @@ bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi
       knots <- knots_pos[[q]]
     }
     X <- remap(d, q, knots, train_x)
-    alpha_grid <- seq(0, 1, by=0.1)
     cv.out = cv.glmnet(X, train_y, alpha = alpha, nfolds = 5) 
     bestlam = cv.out$lambda.min
-    mod = glmnet(X, train_y, alpha = alpha, lambda = bestlam)
+    mod = glmnet(X, train_y, family = 'gaussian', alpha = alpha, lambda = bestlam)
     y_pred = predict(mod, newx = X)
     rmse[row] <- sqrt(mean((train_y - y_pred)^2))
     features <- append(features, list(X))
   }
   idx_min <- combinations[which.min(rmse),]
+  print(combinations)
   return(list(idx_min, features, rmse, knots_pos))
 }
 
-# instead of getting the values which minimize (close to min define a closeness)
-# TOLERANCE
-res = bestmodel_pos(20, 3, train$x, train$y, 0.5, 'cluster')
+set.seed(123)
+res = bestmodel_pos(20, 3, train$x, train$y, 0.5, 'cluster') # d=3, q=19
 
+# best model hyperparameters
 idx_min = res[[1]]
 d = idx_min$Var1
 q = idx_min$Var2
 X = res[[2]][[as.integer(rownames(idx_min))]]
+rmse = res[[3]][as.integer(rownames(idx_min))]
 knots = res[[4]][[q]]
-rmse = res[[3]][57]
-res[[3]]
 
-
-Xtest = remap(d, q, knots, test$x)
+# train the model + predict values on test set data
 train_data <- data.frame(cbind(X, "y" = train$y))
-test_data <- data.frame(Xtest)
 colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
-
-mod <- lm(y ~ ., data = train_data)
+mod <- lm(y~., data = train_data)
+Xtest = remap(d, q, knots, test$x)
+test_data <- data.frame(Xtest)
 y_pred <- predict(mod, newdata = test_data)
-y_train <- predict(mod)
 
+
+## Submission 3 ----------------------
+
+bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi'){
+  D <- 1:dmax
+  Q <- 1:qmax
+  combinations <- data.frame(expand.grid(D, Q))
+  rmse <- c(rep(NA, nrow(combinations)))
+  alpha_values <- c(rep(NA, nrow(combinations)))
+  lambda_values <- c(rep(NA, nrow(combinations)))
+  knots_pos <- list()
+  features <- list()
+  if(pos == 'equi'){
+    knots_pos = lapply(Q, function(q)seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))
+  }
+  if(pos == 'quantile'){
+    knots_pos = lapply(Q, function(q) unname(quantile(train_x,
+                                                      probs = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))))
+  }
+  for(row in 1:nrow(combinations)){
+    d = combinations[row, 1]
+    q = combinations[row, 2]
+    if(pos == 'cluster'){
+      dist <- dist(train_y)
+      hc <- hclust(dist)
+      hc_labels <- cutree(hc, k = q)
+      knots <- sort(unlist(lapply(1:q, function(i) mean(train_x[hc_labels == i]))))
+      knots_pos[[q]] <- knots
+    }
+    else{
+      knots <- knots_pos[[q]]
+    }
+    X <- remap(d, q, knots, train_x)
+    train_data <- data.frame(cbind(X, "y" = train$y))
+    train.control <- trainControl(method = "cv", 
+                                  number = 5)
+    my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-4, 1, length = 100))
+    model <- train(form = y ~. , data = train_data, method = "glmnet",
+                   trControl = train.control, metric = "RMSE", tuneGrid = my_grid)
+    alpha_values[row] <- model$bestTune$alpha
+    lambda_values[row] <- model$bestTune$lambda
+    rmse[row] <- model$results$RMSE[as.integer(rownames(model$bestTune))]
+    features <- append(features, list(X))
+  }
+  idx_min <- combinations[which.min(rmse),]
+  print(combinations)
+  return(list(idx_min, features, rmse, knots_pos, alpha_values, lambda_values))
+}
+
+set.seed(123)
+res = bestmodel_pos(30, 3, train$x, train$y, 0.5, 'cluster') # d=3, q=20
+
+# best model hyperparameters
+idx_min = res[[1]]
+d = idx_min$Var1
+q = idx_min$Var2
+X = res[[2]][[as.integer(rownames(idx_min))]]
+rmse = res[[3]][as.integer(rownames(idx_min))]
+knots = res[[4]][[q]]
+alpha = res[[5]][as.integer(rownames(idx_min))]
+lambda = res[[6]][as.integer(rownames(idx_min))]
+
+# train the model + predict values on test set data
+train_data <- data.frame(cbind(X, "y" = train$y))
+colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
+mod <- glmnet(X, train$y, alpha = alpha, lambda = lambda, family = "gaussian") # diverso
+Xtest = remap(d, q, knots, test$x)
+y_pred <- predict(mod, newx = Xtest)
+y_train <- predict(mod, newx = X)
+
+## Submission 4 ----------------------
+
+# choose values of lambda based on previous 'best' picks
+# standardize?
+bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi'){
+  D <- 1:dmax
+  Q <- 1:qmax
+  combinations <- data.frame(expand.grid(D, Q))
+  rmse <- c(rep(NA, nrow(combinations)))
+  alpha_values <- c(rep(NA, nrow(combinations)))
+  lambda_values <- c(rep(NA, nrow(combinations)))
+  knots_pos <- list()
+  features <- list()
+  if(pos == 'equi'){
+    knots_pos = lapply(Q, function(q)seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))
+  }
+  if(pos == 'quantile'){
+    knots_pos = lapply(Q, function(q) unname(quantile(train_x,
+                                                      probs = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))))
+  }
+  for(row in 1:nrow(combinations)){
+    d = combinations[row, 1]
+    q = combinations[row, 2]
+    if(pos == 'cluster'){
+      dist <- dist(train_y)
+      hc <- hclust(dist)
+      hc_labels <- cutree(hc, k = q)
+      knots <- sort(unlist(lapply(1:q, function(i) mean(train_x[hc_labels == i]))))
+      knots_pos[[q]] <- knots
+    }
+    else{
+      knots <- knots_pos[[q]]
+    }
+    X <- remap(d, q, knots, train_x)
+    train_data <- data.frame(cbind(X, "y" = train$y))
+    train.control <- trainControl(method = "cv", 
+                                  number = 5)
+    my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 100))
+    model <- train(form = y ~. , data = train_data, method = "glmnet",
+                   trControl = train.control, metric = "RMSE", tuneGrid = my_grid)
+    alpha_values[row] <- model$bestTune$alpha
+    lambda_values[row] <- model$bestTune$lambda
+    rmse[row] <- model$results$RMSE[as.integer(rownames(model$bestTune))]
+    features <- append(features, list(X))
+  }
+  idx_min <- combinations[which.min(rmse),]
+  print(combinations)
+  return(list(idx_min, features, rmse, knots_pos, alpha_values, lambda_values))
+}
+
+set.seed(1234) # always the same seed used
+res = bestmodel_pos(20, 3, train$x, train$y, 'cluster') # d=2, q=7 lambda = seq(1e-4, 1, length = 100)
+res = bestmodel_pos(30, 3, train$x, train$y, 'cluster') # d=3, q=22 with lambda = seq(1e-4, 1, length = 100)
+res = bestmodel_pos(50, 3, train$x, train$y, 'cluster') # d=, q= with lambda = seq(1e-3, 2, length = 100)
+res = bestmodel_pos(30, 3, train$x, train$y, 'cluster')
+
+# best model hyperparameters
+idx_min = res[[1]]
+d = idx_min$Var1
+q = idx_min$Var2
+X = res[[2]][[as.integer(rownames(idx_min))]]
+rmse = res[[3]][as.integer(rownames(idx_min))]
+knots = res[[4]][[q]]
+alpha = res[[5]][as.integer(rownames(idx_min))]
+lambda = res[[6]][as.integer(rownames(idx_min))]
+
+# train the model + predict values on test set data
+train_data <- data.frame(cbind(X, "y" = train$y))
+colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
+mod <- glmnet(X, train$y, alpha = alpha, lambda = lambda, family = "gaussian")
+Xtest = remap(d, q, knots, test$x)
+y_pred <- predict(mod, newx = Xtest)
+y_train <- predict(mod, newx = X)
+
+# plot the fit
 plot(train$x, train$y)
 points(train$x, y_train, col = "blue")
 points(test$x, y_pred, col = "red")
 abline(v=knots)
 
+# Submissions --------------------
+
 y <- data.frame("target" = y_pred)
+colnames(y) <- c('target')
 df <- data.frame(cbind("id"=test$id, y))
-write.csv(df, 'submission2.csv', row.names = F)
+write.csv(df, 'submission3.csv', row.names = F)
 
 
-file <- read.csv('submission1.csv')
-file$target_new <- y_pred
-file$x <- test$x
+### Tolerance ---------------------
 
-abline(h = seq(-2000, 10000, 1000))
-abline(v = seq(0, 1, 0.1), col = "red")
+# If the model is overfitting, try simplifying it by reducing the number
+# of predictors or lowering the degree of the polynomial. 
 
-# Nested CV -----------------
+
+rmse_list = res[[3]]
+norm_rmse <- rmse_list/max(rmse_list) # sorted according to model complexity
+best <- min(norm_rmse)
+id_best <- which.min(norm_rmse)
+closest_best <- best
+tol = 5e-3
+for(i in 1:length(norm_rmse)){
+  if((norm_rmse[[i]] - tol <= best) & (i < id_best)){
+    closest_best = norm_rmse[[i]]
+  }
+  else{
+    closest_best = closest_best
+  }
+}
+closest_best*max(rmse_list)
+best*max(rmse_list)
+
+which(norm_rmse == closest_best)
+
+
+# Nested CV ------------------
 
 # YOUR JOB - PART2 --------------------
 
-'''Develop your own implementation of the truncated power basis Gd,q, and then plot a few elements with d ∈ {1, 3} and
-q ∈ {3, 10} equispaced knots in the open interval (0, 1).'''
+# Develop your own implementation of the truncated power basis Gd,q, and then plot a few elements with d ∈ {1, 3} and
+# q ∈ {3, 10} equispaced knots in the open interval (0, 1).
 
-#quanti coefficienti ci servono? d + 1 + q 
-
-linear <- function(x, q){
-  num_coeff <- d + 2
-  
-}
-
-knots <- create_knots(3)
-linear_function <- function(x, knots){
-  out <- 1 + x
-  for(knot in knots){
-    out <- out + pmax((x - knot), 0)*runif(1, min = 0, max = 30)
-  }
-  return(out)
-}
-
-curve(linear_function(x, knots = knots))
-abline(v = knots)
-
-
-knots <- create_knots(10)
-cubic_function <- function(x, knots){
-  out <- 1 + x + x*2 + x*3
-  for(knot in knots){
-    out <- out + (pmax((x - knot), 0)**3)*runif(1, min = 0, max = 30)
-  }
-  return(out)
-}
-
-
-curve(cubic_function(x, knots=knots)); abline(v = knots, lty = 2)
-                                  
 # plots code
 set.seed(12345)
-
-linear <- function(x, q){
-  num_coeff <- d + 2
-  
-}
 
 q <- 3
 knots3 <- seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
@@ -670,12 +820,16 @@ cubic_function <- function(x, knots){
   }
   return(out)
 }
-x<- seq(0, 1, 0.001)
 
-curve(linear_function(x, knots = knots3), xlim = c(0, 1), ylim = c(0, 40),
+# x <- seq(0, 1, 0.001)
+
+## q=3 -----------------------
+
+curve(linear_function(x, knots = knots3), xlim = c(0, 0.999), ylim = c(0, 40),
       xlab = "x", ylab = "y", main = paste('Power Functions with 3 knots'), type = "l", col='coral', lwd=3)
-
-points(x, cubic_function(x, knots=knots), type = "l", col='mediumorchid', lwd=3, xlab = "x", ylab = expression(y), cex.main = 0.6)
+curve(cubic_function(x, knots=knots), xlim = c(0, 0.999), ylim = c(0, 40), add = T,
+      xlab = "x", ylab = "y", main = paste('Power Functions with 3 knots'), type = "l", col='mediumorchid', lwd=3)
+# points(x, cubic_function(x, knots=knots), type = "l", col='mediumorchid', lwd=3, xlab = "x", ylab = expression(y), cex.main = 0.6)
 
 
 # Add vertical lines for knots
@@ -696,16 +850,20 @@ for (i in 1:(length(knots3) + 1)) {
   }
 }
 
-
 legend(x = 0.02, y = 39, legend = c("Linear Function", "Cubic Function"), col = c("darkorange", "mediumorchid"), lty = 1, lwd = 2, cex=0.8, box.lty=0)
 
+## q=10 --------------------------
+
+set.seed(12345)
 q <- 10
 knots10 <- seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
 
-curve(linear_function(x, knots = knots10), xlim = c(0, 1), ylim = c(0, 80),
+curve(linear_function(x, knots = knots10), xlim = c(0, 0.999), ylim = c(0, 110),
       xlab = "x", ylab = "y", main = paste('Power Functions with 10 knots'), type = "l", col='cornflowerblue', lwd=3)
+curve(linear_function(x, knots = knots10), xlim = c(0, 0.999), ylim = c(0, 110), add = T,
+      xlab = "x", ylab = "y", main = paste('Power Functions with 10 knots'), type = "l", col='violet', lwd=3)
 
-points(x, cubic_function(x, knots=knots10), type = "l", col='purple', lwd=3, xlab = "x", ylab = expression(y), cex.main = 0.6)
+# points(x, cubic_function(x, knots=knots10), type = "l", col='purple', lwd=3, xlab = "x", ylab = expression(y), cex.main = 0.6)
 
 
 # Add vertical lines for knots
@@ -713,19 +871,17 @@ abline(v = knots10, lty=2)
 
 for (i in 1:(length(knots10) + 1)) {
   if (i %% 2 == 1) {
-    col <- rgb(0.901, 0.901, 0.980, alpha = 0.3)  
+    col <- adjustcolor('violet', .15)
   } else {
     col <- rgb(0.529, 0.808, 0.980, alpha = 0.2)
   }
-  
   if (i == 1) {
-    rect(0, 0, knots10[i], 80, col = col, border = NA)
+    rect(0, 0, knots10[i], 110, col = col, border = NA)
   } else if (i == length(knots10) + 1) {
-    rect(knots10[i - 1], 0, 1, 80, col = col, border = NA)
+    rect(knots10[i - 1], 0, 1, 110, col = col, border = NA)
   } else {
-    rect(knots10[i - 1], 0, knots10[i], 80, col = col, border = NA)
+    rect(knots10[i - 1], 0, knots10[i], 110, col = col, border = NA)
   }
 }
 
-legend(x = 0.02, y = 77, legend = c("Linear Function", "Cubic Function"), col = c("cornflowerblue", "purple"), lty = 1, lwd = 2, cex=0.8, box.lty=0)
-
+legend(x = 0.02, y = 97, legend = c("Linear Function", "Cubic Function"), col = c("cornflowerblue", "violet"), lty = 1, lwd = 2, cex=0.8, box.lty=0)
