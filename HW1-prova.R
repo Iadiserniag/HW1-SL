@@ -455,29 +455,29 @@ bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi
 set.seed(1234)
 res = bestmodel_pos(50, 3, train$x, train$y, pos='equi') # d=3, q=22 (d=2, q=7 for q up to 20)
 
-# best model hyperparameters
-idx_min = res[[1]]
-d = idx_min$Var1
-q = idx_min$Var2
-X = res[[2]][[as.integer(rownames(idx_min))]]
-rmse = res[[3]][as.integer(rownames(idx_min))]
-knots = res[[4]][[q]]
-alpha = res[[5]][as.integer(rownames(idx_min))]
-lambda = res[[6]][as.integer(rownames(idx_min))]
-
-# train the model + predict values on test set data
-train_data <- data.frame(cbind(X, "y" = train$y))
-colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
-mod <- glmnet(X, train$y, alpha = alpha, lambda = lambda, family = "gaussian")
-Xtest = remap(d, q, knots, test$x)
-y_pred <- predict(mod, newx = Xtest)
-y_train <- predict(mod, newx = X)
-
-# plot the fit
-plot(train$x, train$y)
-points(test$x, y_pred, col = "red")
-# points(test$x, y_pred1, col = "red")
-abline(v=knots)
+# # best model hyperparameters
+# idx_min = res[[1]]
+# d = idx_min$Var1
+# q = idx_min$Var2
+# X = res[[2]][[as.integer(rownames(idx_min))]]
+# rmse = res[[3]][as.integer(rownames(idx_min))]
+# knots = res[[4]][[q]]
+# alpha = res[[5]][as.integer(rownames(idx_min))]
+# lambda = res[[6]][as.integer(rownames(idx_min))]
+# 
+# # train the model + predict values on test set data
+# train_data <- data.frame(cbind(X, "y" = train$y))
+# colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
+# mod <- glmnet(X, train$y, alpha = alpha, lambda = lambda, family = "gaussian")
+# Xtest = remap(d, q, knots, test$x)
+# y_pred <- predict(mod, newx = Xtest)
+# y_train <- predict(mod, newx = X)
+# 
+# # plot the fit
+# plot(train$x, train$y)
+# points(test$x, y_pred, col = "red")
+# # points(test$x, y_pred1, col = "red")
+# abline(v=knots)
 
 
 
@@ -892,7 +892,7 @@ bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi
   return(list(idx_min, features, rmse, knots_pos, alpha_values, lambda_values))
 }
 
-set.seed(1234) 
+set.seed(123) 
 res = bestmodel_pos(10, 3, train$x, train$y, pos='cluster') #d=1, q=4
 res = bestmodel_pos(20, 3, train$x, train$y, pos='cluster') #d=1, q=4 weeeeirdd
 res = bestmodel_pos(30, 3, train$x, train$y, pos='cluster') #d=3, q=21 (non so perchè non 22)
@@ -995,72 +995,45 @@ D <- c(1, 3)
 Q <- 1:qmax
 combinations <- data.frame(expand.grid(D, Q))
 
-k = 5
-data <- train[sample(nrow(train)),]  # Randomly shuffle the data
-outer_folds <- cut(seq(1,nrow(data)), breaks=k, labels=FALSE) # create folds
-rmse <- c(rep(NA, k))
-alpha_values <- c(rep(NA, k))
-lambda_values <- c(rep(NA, k))
 
-# outer loop
-for(fold in 1:k){
-  idx <- which(outer_folds==fold,arr.ind=TRUE)
-  holdout <- data[idx, ]  # specify holdout
-  training_data <- data[-idx, ] # specify train
-  
-  # inner loop
-  # perform CV to select optimal model parameters
-  X <- remap(dmax, qmax, knots, training_data$x)
-  train_df <- data.frame(cbind(X, "y" = training_data$y))
-  train.control <- trainControl(method = "cv", 
-                                number = 5)
-  my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 100))
-  model <- train(form = y ~. , data = train_df, method = "glmnet",
-                 trControl = train.control, metric = "RMSE", tuneGrid = my_grid)
-  alpha_values[fold] <- model$bestTune$alpha
-  lambda_values[fold] <- model$bestTune$lambda
-  rmse[fold] <- model$results$RMSE[as.integer(rownames(model$bestTune))]
-  print(fold)
-}
 
-# average results obtained on the 5(10) outer folds?
-# get SUPER BEST model --> X
-
-# EXCLUDE D=2
-nested_cv <- function(k=5, q=1, d=1, train=train){
+K = 5 
+R = 2 
+es <- c()
+a_list <- c()
+b_list <- c()
+for(r in 1:R){ # number of repetitions (repeated ncv)
   data <- train[sample(nrow(train)),]  # Randomly shuffle the data
   outer_folds <- cut(seq(1,nrow(data)), breaks=k, labels=FALSE) # create folds
-  rmse <- c(rep(NA, k))
-  alpha_values <- c(rep(NA, k))
-  lambda_values <- c(rep(NA, k))
-  # outer loop
-  for(fold in 1:k){
+  for(k in 1:K){ # OUTER LOOP
     idx <- which(outer_folds==fold,arr.ind=TRUE)
     holdout <- data[idx, ]  # specify holdout
     training_data <- data[-idx, ] # specify train
-    # inner loop
-    # perform CV to select optimal model parameters
-    X <- remap(d, q, knots, training_data$x)
+    X <- remap(dmax, qmax, knots, training_data$x) # INNER LOOP
     train_df <- data.frame(cbind(X, "y" = training_data$y))
     train.control <- trainControl(method = "cv", 
-                                  number = 5)
-    my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 100))
+                                  number = K-1) # on remaining K-1 folds
+    my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 10))
     model <- train(form = y ~. , data = train_df, method = "glmnet",
-                   trControl = train.control, metric = "RMSE", tuneGrid = my_grid)
-    alpha_values[fold] <- model$bestTune$alpha
-    lambda_values[fold] <- model$bestTune$lambda
-    # rmse[fold] <- model$results$RMSE[as.integer(rownames(model$bestTune))]
-    print(fold)
-    # build glmnet model on "full" training set with optimal hyperparameters
-    mod = glmnet(X, train_y, family = 'gaussian', alpha = alpha, lambda = bestlam)
-    # evaluate the model on the holdout set
-    # get Xtest using remap
-    y_pred = predict(mod, newx = Xtest)
-    # save the rmse
-    rmse[row] <- sqrt(mean((train_y - y_pred)^2))
+                   trControl = train.control, metric = "RMSE", tuneGrid = my_grid,
+                   list = TRUE, returnResamp = "all", summaryFunction = defaultSummary)
+    e_in <- model$resample$RMSE # our loss is RMSE
+    alpha = model$bestTune$alpha # get optimal parameters
+    bestlam = model$bestTune$lambda # get optimal parameters
+    mod = glmnet(X, training_data$y, family = 'gaussian', alpha = alpha, lambda = bestlam) # Fit the model using the training set
+    Xout = remap(dmax, qmax, knots, holdout$x)
+    y_pred = predict(mod, newx = Xout) # Evaluate the model using the holdout set
+    e_out <- sqrt((holdout$y - y_pred)**2) # single point losses
+    
+    a_list <- append(a_list, (mean(e_in) - mean(e_out))**2)
+    b_list <- append(b_list, as.numeric(var(e_out))/nrow(holdout)) # non capisco qua come fa ad essere var di e_out
+    # se la loss è rmse
+    es <- append(es, e_in)
   }
-  # average over outer loop results
 }
+
+MSE <- mean(a_list) - mean(b_list) # we have to apply the loss at the beginning as RMSE otherwose
+# we might have negative mse and cannot do the root
 
 # THEN:
 # apply the function in the previous one instead of doing normal cv, and output that as rmse
