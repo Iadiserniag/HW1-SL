@@ -2,8 +2,6 @@
 library(caret)
 library(glmnet)
 library(elasticnet)
-library(doMC)
-
 
 train <- read.csv('train.csv')
 test <- read.csv('test.csv')
@@ -996,7 +994,6 @@ Q <- 1:qmax
 combinations <- data.frame(expand.grid(D, Q))
 
 
-
 K = 5 
 R = 2 
 es <- c()
@@ -1047,6 +1044,107 @@ MSE <- mean(a_list) - mean(b_list) # we have to apply the loss at the beginning 
 # The prediction error is then averaged over R repetitions of the outer loop to obtain
 # a stable estimate of the model's performance.
 
+### Simpler but functioning version -----------------------------
+
+nestedCV <- function(d=1, q=1, k_out=10, k_in=5, lambda_seq=seq(1e-3, 2, length = 10), outer_folds){
+  for(fold in 1:k_out){ # OUTER LOOP
+    idx <- which(outer_folds==fold, arr.ind=TRUE)
+    holdout <- data[idx, ]  # specify holdout
+    training_data <- data[-idx, ] # specify train
+    Xval <- remap(d, q, knots, training_data$x) # INNER LOOP
+    train_df <- data.frame(cbind(Xval, "y" = training_data$y))
+    train.control <- trainControl(method = "cv", 
+                                  number = k_in)
+    my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = lambda_seq)
+    model <- train(form = y ~. , data = train_df, method = "glmnet",
+                   trControl = train.control, metric = "RMSE", tuneGrid = my_grid)
+    bestalpha = model$bestTune$alpha # get optimal parameters
+    bestlam = model$bestTune$lambda # get optimal parameters
+    X <- Xval
+    mod <- glmnet(X, training_data$y, family = 'gaussian', alpha = bestalpha, lambda = bestlam) # Fit the model using the training set
+    Xout <- remap(d, q, knots, holdout$x)
+    y_pred <- predict(mod, newx = Xout) # Evaluate the model using the holdout set
+    out_list[fold] <- sqrt(mean((holdout$y - y_pred)**2)) # single point losses
+  }
+  mean(out_list)
+}
+
+bestmodel_ncv <- function(qmax=1, dmax=1, train, pos = 'equi', k_out=5, k_in=5){
+  D <- c(1, 3) # exclude d=2
+  Q <- 1:qmax
+  combinations <- data.frame(expand.grid(D, Q))
+  rmse <- c(rep(NA, nrow(combinations)))
+  alpha_values <- c(rep(NA, nrow(combinations)))
+  lambda_values <- c(rep(NA, nrow(combinations)))
+  knots_pos <- list()
+  features <- list()
+  train_x = train$x
+  train_y = train$y
+  if(pos == 'equi'){
+    knots_pos = lapply(Q, function(q)seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))
+  }
+  if(pos == 'quantile'){
+    knots_pos = lapply(Q, function(q) unname(quantile(train_x,
+                                                      probs = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))))
+  }
+  for(row in 1:nrow(combinations)){
+    d = combinations[row, 1]
+    q = combinations[row, 2]
+    if(pos == 'cluster'){
+      dist <- dist(train_y)
+      hc <- hclust(dist)
+      hc_labels <- cutree(hc, k = q)
+      knots <- sort(unlist(lapply(1:q, function(i) mean(train_x[hc_labels == i]))))
+      knots_pos[[q]] <- knots
+    }
+    else{
+      knots <- knots_pos[[q]]
+    }
+    data <- train[sample(nrow(train)),]  # Randomly shuffle the data
+    outer_folds <- cut(seq(1,nrow(data)), breaks=k_out, labels=FALSE) # create folds
+    rmse[row] <- nestedCV(d=d, q=q, k_out = k_out, k_in = k_in, outer_folds = outer_folds)
+    X <- remap(d, q, knots, train_x)
+    features <- append(features, list(X))
+    print(row)
+  }
+  idx_min <- combinations[which.min(rmse),]
+  return(list(idx_min, features, rmse, knots_pos, alpha_values, lambda_values))
+}
+
+# testing
+set.seed(123)
+res = bestmodel_ncv(10, 3, train, pos='cluster', k_out=5, k_in=5)
+
+# best model hyperparameters
+idx_min = res[[1]]
+d = idx_min$Var1
+q = idx_min$Var2
+X = res[[2]][[as.integer(rownames(idx_min))]]
+rmse = res[[3]][as.integer(rownames(idx_min))]
+knots = res[[4]][[q]]
+
+# once we have our ideal combination of d and q, let's find the coefficients of 
+# alpha and lambda which minimize the rmse for those d and q
+# train the model + predict values on test set data
+train_data <- data.frame(cbind(X, "y" = train$y))
+colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
+train.control <- trainControl(method = "cv", 
+                              number = 5)
+my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 10))
+model <- train(form = y ~. , data = train_data, method = "glmnet",
+               trControl = train.control, metric = "RMSE", tuneGrid = my_grid)
+bestalpha = model$bestTune$alpha # get optimal parameters
+bestlam = model$bestTune$lambda # get optimal parameters
+
+# Finally, we fit the model
+mod <- glmnet(X, train$y, family = "gaussian", alpha = bestalpha, lambda = bestlam)
+Xtest = remap(d, q, knots, test$x)
+y_pred <- predict(mod, newx = Xtest)
+y_train <- predict(mod, newx = X)
+
+# plot the fit on test data on top of training data
+plot(train$x, train$y)
+points(test$x, y_pred, col="red")
 
 # YOUR JOB - PART2 --------------------
 
