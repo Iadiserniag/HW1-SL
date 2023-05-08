@@ -809,7 +809,7 @@ bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi
 set.seed(1234) # always the same seed used RUN EVERY TIME!
 res = bestmodel_pos(10, 3, train$x, train$y, pos='cluster') # d=2, q=7 with lambda = seq(1e-3, 2, length = 100)
 res = bestmodel_pos(30, 3, train$x, train$y, pos='cluster') # d=2, q=25 with lambda = seq(1e-3, 2, length = 100)
-# da testare ancora
+# da testare ancora secondo me si è impallato i risulati sono uguali alla submission 5 (equidistanced)
 res = bestmodel_pos(50, 3, train$x, train$y, pos='cluster') # d=3, q=22 with lambda = seq(1e-3, 2, length = 100)
 
 
@@ -842,12 +842,95 @@ points(test$x, y_pred, col = "red")
 # points(test$x, y_pred1, col = "red")
 abline(v=knots)
 
+## Prove per Submission 6 NO D=2 ---------------------------
+
+# ESCLUDENDO d=2
+bestmodel_pos <- function(qmax=1, dmax=1, train_x, train_y, alpha=0, pos = 'equi'){
+  D <- c(1, 3) # exclude d=2
+  Q <- 1:qmax
+  combinations <- data.frame(expand.grid(D, Q))
+  rmse <- c(rep(NA, nrow(combinations)))
+  alpha_values <- c(rep(NA, nrow(combinations)))
+  lambda_values <- c(rep(NA, nrow(combinations)))
+  knots_pos <- list()
+  features <- list()
+  if(pos == 'equi'){
+    knots_pos = lapply(Q, function(q)seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))
+  }
+  if(pos == 'quantile'){
+    knots_pos = lapply(Q, function(q) unname(quantile(train_x,
+                                                      probs = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))))
+  }
+  for(row in 1:nrow(combinations)){
+    d = combinations[row, 1]
+    q = combinations[row, 2]
+    if(pos == 'cluster'){
+      dist <- dist(train_y)
+      hc <- hclust(dist)
+      hc_labels <- cutree(hc, k = q)
+      knots <- sort(unlist(lapply(1:q, function(i) mean(train_x[hc_labels == i]))))
+      knots_pos[[q]] <- knots
+    }
+    else{
+      knots <- knots_pos[[q]]
+    }
+    X <- remap(d, q, knots, train_x)
+    train_data <- data.frame(cbind(X, "y" = train$y))
+    train.control <- trainControl(method = "cv", 
+                                  number = 5)
+    my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 100))
+    model <- train(form = y ~. , data = train_data, method = "glmnet",
+                   trControl = train.control, metric = "RMSE", tuneGrid = my_grid)
+    alpha_values[row] <- model$bestTune$alpha
+    lambda_values[row] <- model$bestTune$lambda
+    rmse[row] <- model$results$RMSE[as.integer(rownames(model$bestTune))]
+    features <- append(features, list(X))
+    print(row)
+  }
+  idx_min <- combinations[which.min(rmse),]
+  print(combinations)
+  return(list(idx_min, features, rmse, knots_pos, alpha_values, lambda_values))
+}
+
+set.seed(1234) 
+res = bestmodel_pos(10, 3, train$x, train$y, pos='cluster') #d=1, q=4
+res = bestmodel_pos(20, 3, train$x, train$y, pos='cluster') #d=1, q=4 weeeeirdd
+res = bestmodel_pos(30, 3, train$x, train$y, pos='cluster') #d=3, q=21 (non so perchè non 22)
+res = bestmodel_pos(10, 3, train$x, train$y, pos='equi') #d=1, q=4
+res = bestmodel_pos(20, 3, train$x, train$y, pos='equi') #d=1, q=4
+res = bestmodel_pos(30, 3, train$x, train$y, pos='equi') #d=3, q=23 best equispaced algo (perchè non 22 ahhaha)
+# forse è il seed diverso, lo ricontrolliamo prima di mandarlo
+
+# best model hyperparameters
+idx_min = res[[1]]
+d = idx_min$Var1
+q = idx_min$Var2
+X = res[[2]][[as.integer(rownames(idx_min))]]
+rmse = res[[3]][as.integer(rownames(idx_min))]
+knots = res[[4]][[q]]
+alpha = res[[5]][as.integer(rownames(idx_min))]
+lambda = res[[6]][as.integer(rownames(idx_min))]
+
+# train the model + predict values on test set data
+train_data <- data.frame(cbind(X, "y" = train$y))
+colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
+mod <- glmnet(X, train$y, alpha = alpha, lambda = lambda, family = "gaussian")
+Xtest = remap(d, q, knots, test$x)
+y_pred <- predict(mod, newx = Xtest)
+y_train <- predict(mod, newx = X)
+
+# plot the fit
+plot(train$x, train$y)
+points(test$x, y_pred, col = "red")
+# points(test$x, y_pred1, col = "red")
+abline(v=knots)
+
 # How to submit --------------------
 
 y <- data.frame("target" = y_pred)
 colnames(y) <- c('target')
 df <- data.frame(cbind("id"=test$id, y))
-write.csv(df, 'submission5.csv', row.names = F)
+write.csv(df, 'cluster_moreknots.csv', row.names = F)
 
 
 ### Tolerance ---------------------
@@ -896,57 +979,101 @@ remap <- function(d, q, knots, x){
   return(X)
 }
 
+n = length(training_data)
+X <- matrix(0, n, dmax+qmax)
+knots = seq(1/(qmax+1), 1 - 1/(qmax+1), 1/(qmax+1))
+for(i in 1:dmax){
+  X[,i] <- (training_data)**i
+}
 
-D <- 1:dmax
+
+# example
+dmax <- 3
+qmax <- 3
+knots <- seq(1/(qmax+1), 1 - 1/(qmax+1), 1/(qmax+1))
+D <- c(1, 3)
 Q <- 1:qmax
 combinations <- data.frame(expand.grid(D, Q))
-qmax <- 3
-qmax <- 10
+
+k = 5
+data <- train[sample(nrow(train)),]  # Randomly shuffle the data
+outer_folds <- cut(seq(1,nrow(data)), breaks=k, labels=FALSE) # create folds
+rmse <- c(rep(NA, k))
+alpha_values <- c(rep(NA, k))
+lambda_values <- c(rep(NA, k))
 
 # outer loop
-for(i in length(combinations)){
-  data <- train[sample(nrow(train)),]  # Randomly shuffle the data
-  train <- data[1:0.8*nrow(data),]
-  holdout <- data[0.8*nrow(data)+1:nrow(data),]
-  folds <- cut(seq(1,nrow(train)), breaks=10, labels=FALSE)
+for(fold in 1:k){
+  idx <- which(outer_folds==fold,arr.ind=TRUE)
+  holdout <- data[idx, ]  # specify holdout
+  training_data <- data[-idx, ] # specify train
+  
   # inner loop
-  for(j in length(folds)){
-    X <- remap(d, q, knots, train_x)
-    train_data <- data.frame(cbind(X, "y" = train$y))
+  # perform CV to select optimal model parameters
+  X <- remap(dmax, qmax, knots, training_data$x)
+  train_df <- data.frame(cbind(X, "y" = training_data$y))
+  train.control <- trainControl(method = "cv", 
+                                number = 5)
+  my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 100))
+  model <- train(form = y ~. , data = train_df, method = "glmnet",
+                 trControl = train.control, metric = "RMSE", tuneGrid = my_grid)
+  alpha_values[fold] <- model$bestTune$alpha
+  lambda_values[fold] <- model$bestTune$lambda
+  rmse[fold] <- model$results$RMSE[as.integer(rownames(model$bestTune))]
+  print(fold)
+}
+
+# average results obtained on the 5(10) outer folds?
+# get SUPER BEST model --> X
+
+# EXCLUDE D=2
+nested_cv <- function(k=5, q=1, d=1, train=train){
+  data <- train[sample(nrow(train)),]  # Randomly shuffle the data
+  outer_folds <- cut(seq(1,nrow(data)), breaks=k, labels=FALSE) # create folds
+  rmse <- c(rep(NA, k))
+  alpha_values <- c(rep(NA, k))
+  lambda_values <- c(rep(NA, k))
+  # outer loop
+  for(fold in 1:k){
+    idx <- which(outer_folds==fold,arr.ind=TRUE)
+    holdout <- data[idx, ]  # specify holdout
+    training_data <- data[-idx, ] # specify train
+    # inner loop
+    # perform CV to select optimal model parameters
+    X <- remap(d, q, knots, training_data$x)
+    train_df <- data.frame(cbind(X, "y" = training_data$y))
     train.control <- trainControl(method = "cv", 
                                   number = 5)
     my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 100))
-    model <- train(form = y ~. , data = train_data, method = "glmnet",
+    model <- train(form = y ~. , data = train_df, method = "glmnet",
                    trControl = train.control, metric = "RMSE", tuneGrid = my_grid)
-    alpha_values[row] <- model$bestTune$alpha
-    lambda_values[row] <- model$bestTune$lambda
-    rmse[row] <- model$results$RMSE[as.integer(rownames(model$bestTune))]
+    alpha_values[fold] <- model$bestTune$alpha
+    lambda_values[fold] <- model$bestTune$lambda
+    # rmse[fold] <- model$results$RMSE[as.integer(rownames(model$bestTune))]
+    print(fold)
+    # build glmnet model on "full" training set with optimal hyperparameters
+    mod = glmnet(X, train_y, family = 'gaussian', alpha = alpha, lambda = bestlam)
+    # evaluate the model on the holdout set
+    # get Xtest using remap
+    y_pred = predict(mod, newx = Xtest)
+    # save the rmse
+    rmse[row] <- sqrt(mean((train_y - y_pred)^2))
   }
+  # average over outer loop results
 }
 
+# THEN:
+# apply the function in the previous one instead of doing normal cv, and output that as rmse
+# minimize the rmse obtained with ncv --> rmse[row] <- sqrt(mean((train_y - y_pred)^2))
+# do for every combination of d and q 
 
-#Perform 10 fold cross validation
-for(i in 1:10){
-  #Segement your data by fold using the which() function 
-  testIndexes <- which(folds==i,arr.ind=TRUE)
-  testData <- yourData[testIndexes, ]
-  trainData <- yourData[-testIndexes, ]
-  #Use the test and train data partitions however you desire...
-}
-
-# holdout set
-# split into folds and do kfold cv (use caret)
-# choose hyperparameters in inner loop
-
+# EXPLANATION:
 # At each iteration of the outer loop, the data is randomly partitioned into K folds,
 # and the inner loop is applied to K-1 of the folds.
 # The remaining fold is used to estimate the prediction error of the model.
 # The prediction error is then averaged over R repetitions of the outer loop to obtain
 # a stable estimate of the model's performance.
 
-# A holdout set is a technique where a subset of the data is randomly selected and held out
-# of the training process. The remaining data is used to train the model, and the holdout set
-# is used to evaluate the model's performance. 
 
 # YOUR JOB - PART2 --------------------
 
