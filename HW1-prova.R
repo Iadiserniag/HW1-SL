@@ -1112,8 +1112,9 @@ bestmodel_ncv <- function(qmax=1, dmax=1, train, pos = 'equi', k_out=5, k_in=5){
 }
 
 # testing
-set.seed(123)
-res = bestmodel_ncv(10, 3, train, pos='cluster', k_out=5, k_in=5)
+set.seed(1234)
+res = bestmodel_ncv(10, 3, train, pos='cluster', k_out=5, k_in=5) #d=1, q=7
+res = bestmodel_ncv(10, 3, train, pos='equi', k_out=5, k_in=5) #d=1, q=7
 
 # best model hyperparameters
 idx_min = res[[1]]
@@ -1130,7 +1131,7 @@ train_data <- data.frame(cbind(X, "y" = train$y))
 colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
 train.control <- trainControl(method = "cv", 
                               number = 5)
-my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 10))
+my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 100))
 model <- train(form = y ~. , data = train_data, method = "glmnet",
                trControl = train.control, metric = "RMSE", tuneGrid = my_grid)
 bestalpha = model$bestTune$alpha # get optimal parameters
@@ -1141,10 +1142,13 @@ mod <- glmnet(X, train$y, family = "gaussian", alpha = bestalpha, lambda = bestl
 Xtest = remap(d, q, knots, test$x)
 y_pred <- predict(mod, newx = Xtest)
 y_train <- predict(mod, newx = X)
+sqrt(mean((train$x - y_train)**2))
+rmse
 
 # plot the fit on test data on top of training data
 plot(train$x, train$y)
 points(test$x, y_pred, col="red")
+abline(v=knots)
 
 # YOUR JOB - PART2 --------------------
 
