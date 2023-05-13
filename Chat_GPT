@@ -1,0 +1,144 @@
+## Chat GPT Comparison\
+
+Now we asked Chat GPT to perform the task of computing to implement and plot the truncated power basis $\textit{G}_{d,q}$. We started with a general version of the task:\
+'Can you create in R and plot the truncated power function?'\
+The answer was:\
+'Certainly! I can guide you on how to create and plot a truncated power function in R. The truncated power function is defined as:\
+
+f(x) = (x^a) / (1 + x^a)\
+
+where 'a' is the exponent parameter. To create and plot this function, you can follow the steps below:'\
+```{r}
+install.packages("ggplot2")  # If not already installed
+library(ggplot2)
+truncated_power <- function(x, a) {
+  (x^a) / (1 + x^a)
+}
+x <- seq(0.01, 10, by = 0.01)  # Generate x-values from 0.01 to 10
+a <- 2  # Exponent parameter
+y <- truncated_power(x, a)  # Calculate y-values
+data <- data.frame(x = x, y = y)
+
+
+```
+
+
+
+```{r, echo=FALSE}
+ggplot(data, aes(x = x, y = y)) +
+  geom_line() +
+  labs(x = "x", y = "f(x)") +
+  ggtitle("Truncated Power Function") +
+  theme_minimal()
+```
+
+
+
+Then we experimented a more specific version of the question:\
+'Can you implement the truncated power basis function and plot it in R with degree equal to 1 and number of knots equal to 3?'\
+The answer was:\
+'Certainly! The truncated power basis function is a commonly used basis function in regression analysis. It is defined as a piecewise function that consists of power functions with different truncation points (knots).\
+
+To implement and plot the truncated power basis function in R with a degree of 1 and 3 knots, you can use the bs() function from the splines package. Here's an example code:'\
+
+```{r}
+# Install and load the required package
+#install.packages("splines")
+library(splines)
+
+# Define the number of knots and degree
+num_knots <- 3
+degree <- 1
+
+# Generate a sequence of x values
+x <- seq(0, 1, length = 100)
+
+# Create the truncated power basis function
+basis <- bs(x, knots = quantile(x, probs = seq(0, 1, length = num_knots + 2)), degree = degree, intercept = TRUE)
+
+```
+
+Also the code for the plot was added:
+
+```{r , echo=FALSE}
+# Plot the basis function
+plot(x, basis[, 1], type = "l", xlab = "x", ylab = "Basis Function", main = "Truncated Power Basis Function (Degree = 1, Knots = 3)")
+
+# Add lines for the remaining basis functions
+for (i in 2:(degree + 1)) {
+  lines(x, basis[, i], col = i)
+}
+
+# Add a legend
+legend("topright", legend = c("Basis 1", paste0("Basis ", 2:(degree + 1))), col = 1:(degree + 1), lty = 1)
+```
+
+Then we asked to perform the same task but without using specific R packages, changing also the degree and number of knots, with the following question:\
+'Can you implement the truncated power basis function and plot it in R with degree equal to 3 and number of knots equal to 10 without using packets?'\
+The answer was:\
+'Certainly! To implement the truncated power basis function and plot it in R without using external packages, you can create a custom function that calculates the basis function values for given input values. Here's an example code:\
+
+
+
+```{r}
+
+# Define the number of knots and degree
+num_knots <- 10
+degree <- 3
+
+# Generate a sequence of x values
+x <- seq(0, 1, length = 100)
+
+# Function to calculate truncated power basis function values
+truncated_power_basis <- function(x, knots, degree) {
+  basis <- matrix(0, nrow = length(x), ncol = degree + 1)
+  basis[, 1] <- 1
+  
+  for (i in 2:(degree + 1)) {
+    basis[, i] <- pmax(0, x - knots[i - 1])^degree
+    basis[, i] <- basis[, i] - pmax(0, x - knots[num_knots])^degree
+    basis[, i] <- basis[, i] / (knots[num_knots] - knots[i - 1])
+  }
+  
+  return(basis)
+}
+
+# Generate the knots
+knots <- seq(0, 1, length = num_knots + 2)
+
+# Calculate the basis function values
+basis <- truncated_power_basis(x, knots, degree)
+
+
+```
+
+
+
+
+
+```{r}
+
+
+# Plot the basis function
+plot(x, basis[, 1], type = "l", xlab = "x", ylab = "Basis Function", main = "Truncated Power Basis Function (Degree = 3, Knots = 10)")
+
+# Add lines for the remaining basis functions
+for (i in 2:(degree + 1)) {
+  lines(x, basis[, i], col = i)
+}
+
+# Add a legend
+legend("topright", legend = c("Basis 1", paste0("Basis ", 2:(degree + 1))), col = 1:(degree + 1), lty = 1)
+
+```
+
+This code will generate a plot of the truncated power basis function with a degree of 3 and 10 knots. The x-axis represents the input values, and the y-axis represents the value of the basis function at each x value. The plot will show multiple lines, each corresponding to a different basis function.\
+
+Note that in this implementation, we calculate the basis function values manually using the truncated power basis formula. The truncated_power_basis() function takes the input values x, the knots, and the degree as arguments, and returns a matrix containing the basis function values for each input value.'\
+
+From the various tests performed, it is evident that Chat Gpt bot does not always return correct information and is dependent on the way the question is asked, as can be seen from the huge difference between the first answer, which was generally about the truncated power function, and the others where it was stated to generate the truncated power basis function and plot it with a certain number of knots q and degree d. Consequently, it is necessary in using it to ask very specific questions already directed towards the desired answer and to be alert to the presence of errors. Moreover it is evident that the plots are not as correct and representative as they should be, and what Chat returns can only be used as a basis for asking other questions, searching on more reliable resources.
+On the other hand, what it gives back can provide hints for reasoning when starting completely from scratch and for the use of certain methods such as certain libraries that it proposes to use, getting an answer in a very short time, that could allow to get an idea of how to proceed (and how not to proceed...).
+Then we asked Chat GPT an opinion about it and eventually it confirmed what we stated above:
+'What do you think of the service you provide?'
+
+'As an AI language model, I don't have personal opinions or subjective experiences. However, I can provide information and assistance on a wide range of topics. My purpose is to assist users in generating human-like text based on the input provided to me. The effectiveness and usefulness of the service I provide can vary depending on the specific use case and the quality of the input given to me. It's important to remember that while I strive to be helpful and accurate, I am an AI and may not always provide perfect or flawless responses. It's always a good idea to verify information from multiple sources and use critical thinking when interpreting the outputs.'
