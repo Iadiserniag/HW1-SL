@@ -1,0 +1,130 @@
+---
+title: "Statistical Learning"
+author: |
+  | \textsc{\textbf{Group 19 - Le superchicche}}
+  |
+  | Cammarota Sara, Iadisernia Giulia, Petrucci Ilaria
+  |
+date:  |
+  | \underline{May 15th, 2023}
+output:
+  html_document:
+    keep_md: yes
+    theme: united
+urlcolor: magenta
+linkcolor: cyan
+geometry: margin=1.25cm
+fontsize: 12pt
+---
+
+# Part I
+
+### 1.1 "Be linear in transformed feature space"
+
+bla bla bla
+
+### 1.2 Truncated power basis functions
+
+Truncated power basis functions $G_{d, q}$ are defined as
+$$\{g_1(x) = 1, g_2(x) = x, ..., g_{d+1}(x) = x^d\} \ \ \text{and} \ \ \{g_{(d+1)+j}(x) = (x - \xi_j)_+^d \}_{j=1}^q \ \ \text{where} (x)_+ = max\{0, x\}$$
+
+We choose _degree_ $d \in \{1, 3\}$ and the number of equi-spaced _knots_ $q \in \{3, 10\}$ where $\{\xi_j\}_{j=1}^q \in (0, 1)$.
+
+\
+
+#### 1.2.1 Our implementation vs...
+
+Let's suppose $d=1$ and $q=3$
+
+$$\{g_i(x)\}_{i=1}^2 = \{g_1(x) = 1, g_2(x) = x\} \ \ \text{and} \ \ \{g_{2+j}(x)\}_{j=1}^3 = \{g_3(x) = (x - \xi_1)_+, g_4(x) = (x - \xi_2)_+, g_5(x) = (x - \xi_3)_+\}$$ where the knots $\{\xi_j\}_{j=1}^3$ are respectively equal to $0.25, 0.50, 0.75$.
+
+```{r basis d equal to 1 q equal to 3, echo=FALSE, fig.align= 'center'}
+
+d <- 1
+q <- 3
+knots <- seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
+
+g2 <- function(x) x
+g3 <- function(x) pmax((x - knots[1]), 0)
+g4 <- function(x) pmax((x - knots[2]), 0)
+g5 <- function(x) pmax((x - knots[3]), 0)
+curve(g2(x), col = "orchid", lwd = 2,
+      main = "Truncated power basis with d=1 & q=3", ylab = expression(g[i](x)))
+curve(g3(x), add = T, col = "purple", lwd = 2)
+curve(g4(x), add = T, col = "blue", lwd = 2)
+curve(g5(x), add = T, col = "darkblue", lwd = 2)
+legend("topleft", legend = c(expression(g[2](x)),
+                             expression(g[3](x)),
+                             expression(g[4](x)),
+                             expression(g[5](x))),
+       col = c("orchid", "purple", "blue", "darkblue"), lwd = 3, cex=1)
+abline(v = knots, lty = 2)
+text(0.31, 1, expression(xi[1] == 0.25), cex = 0.8)
+text(0.55, 1, expression(xi[2] == 0.50), cex = 0.8)
+text(0.81, 1, expression(xi[3] == 0.75), cex = 0.8)
+
+
+```
+When $d=1$ and $q=10$
+
+$$\{g_i(x)\}_{i=1}^2 = \{g_1(x) = 1, g_2(x) = x\} \ \ \text{and} \ \ \{g_{2+j}(x)\}_{j=1}^{10}$$ where the knots $\{\xi_j\}_{j=1}^3$ are respectively equal to $0.09, 0.18, 0.27 0.36, 0.45, 0.54, 0.63, 0.72, 0.81, 0.91$. In the figure below we plot some of these basis functions.
+
+```{r basis d equal to 1 and q equal to 10, echo=FALSE, fig.align= 'center'}
+
+q <- 10
+
+curves <- list()
+knots <- seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
+j = seq(1, q, 2)
+for(i in 1:5){
+  curves[[i]] <- function(x, k = knots) pmax((x - k[j[i]]), 0)
+}
+
+plot(NULL, xlim = c(0, 1), ylim = c(0, 1), xlab = 'x', ylab = expression(g[i](x)), main = "Truncated power basis with d=1 & q=3")
+cols <- c("orchid", "purple", "blue", "darkblue", 5)
+for (i in 1:5) {
+  curve(curves[[i]](x), add = TRUE, col = cols[[i]], lwd = 2)
+  abline(v = knots[j[i]], lty = 2)
+}
+legend("topleft", legend = c(expression(g[2](x)),
+                             expression(g[4](x)),
+                             expression(g[6](x)),
+                             expression(g[8](x)),
+                             expression(g[10](x))),
+       col = c("orchid", "purple", "blue", "darkblue", 5), lwd = 3, cex=1)
+
+```
+Now, let's have a look at what changes when we increase the degree to $d=3$. For simplicity, let's choose $q=3$.
+
+rifare plots con x, x**2, x**3 + i tre knots
+
+\
+
+#### 1.2.2 ...**ChatGPT**'s reply
+
+### 1.3 Our very first Kaggle competition
+
+#### 1.3.1 Import modules
+
+```{r import modules, eval=FALSE}
+library(caret)
+library(glmnet)
+library(elasticnet)
+library(doParallel)
+library(dplyr)
+```
+
+#### 1.3.2 The `wmap` dataset
+
+```{r import data}
+train <- read.csv('train.csv')
+test <- read.csv('test.csv')
+```
+
+\newpage
+
+# Part II
+
+
+
+
