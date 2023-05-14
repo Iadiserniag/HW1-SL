@@ -1,37 +1,65 @@
 ---
-title: "Statistical Learning"
+title: "Homework-01"
 author: |
-  | \textsc{\textbf{Group 19 - Le superchicche}}
+  |
+  |
+  | Group 19 - Le superchicche
   |
   | Cammarota Sara, Iadisernia Giulia, Petrucci Ilaria
   |
 date:  |
-  | \underline{May 15th, 2023}
+  | May 15th, 2023
 output:
-  pdf_document:
-    keep_tex: yes
-    toc: no
   html_document:
     keep_md: yes
     theme: united
+    css: styles.css
 urlcolor: magenta
 linkcolor: cyan
 geometry: margin=2cm
 fontsize: 12pt
 ---
 
+<style>
+p {
+  text-align: justify;
+}
+</style>
+
+\
+
+```{r, fig.align='center', out.width='400px', out.height='200px', echo=FALSE}
+knitr::include_graphics("intro4.jpg")
+```
+
+\
+
 # Part I
 
 ### 1.1 "Be linear in transformed feature space"
 
-bla bla bla
+**Splines** are a powerful and flexible method that is able to capture complex structures in the data by fitting together a series of polynomial segments which are smoothly connected at specified points called knots. In splines we estimate our target function as 
 
-\
+$$
+\hat{f}(x)= \sum_{i = 1}^{N} \beta_i \, g_i(x)
+$$
+
+for some suitable (to be determined) values of $\beta_i$, where $g_i(x)$ are the truncated power functions and $N = d + q + 1$ is the number of parameters. In particular $d$ is the degree of the spline polynomial and $q$ is the number of knots. 
+
+The splines approach is a manifestation of _being linear in transformed feature space_ because we perform an embedding of the features into a more complex space where we can perform linear regression; in our case, for example, we will start with a simple vector $x$ ($1$-dimensional) and we will obtain a large matrix with $d+q+1$ columns, hence $d+q+1$ features.
+
+We basically transform the linear space into a higher-dimensional space and look for a *linear-in-higher-dimensional-space* relation that links the input to the output, and finally project this relation back into the original feature space. 
+
+On the other hand, **orthogonal series expansion** typically involves using a fixed set of basis functions, such as the cosine basis functions $\phi_j(x) = \sqrt2\,cos\,(j\pi x)\,$, to represent the data, which can be limiting in terms of the shapes and patterns that can be captured. 
+
+The main difference between splines and the orthogonal series expansion is that the latter allows us to build a *global* object that fits the data in the *whole* feature space, while the power of the former method, as already stated, is that it is the union of several *local* objects. In this sense we *may* be able to capture more complex and hidden structures in the data. 
+
+Another important difference is in the way the basis functions are constructed. Orthogonal series expansion uses a fixed set of basis functions that are *orthogonal* to each other, which can simplify the computation of the coefficients for the expansion. Splines, on the other hand, typically use basis functions that are not orthogonal - i.e. truncated power basis - , but are chosen to be locally supported and smooth, which can lead to more accurate approximation of the data.
 
 ### 1.2 Truncated power basis functions
 
 _Truncated power basis functions_ $G_{d, q}$ are defined as
-$\{g_1(x) = 1, g_2(x) = x, ..., g_{d+1}(x) = x^d\}$ and $\{g_{(d+1)+j}(x) = (x - \xi_j)_+^d \}_{j=1}^q \ \ \text{where} (x)_+ = max\{0, x\}$
+$$\{g_1(x) = 1, g_2(x) = x, ..., g_{d+1}(x) = x^d\}$$ and $$\{g_{(d+1)+j}(x) = (x - \xi_j)_+^d \}_{j=1}^q \ \ \text{where} (x)_+ = max\{0, x\}$$
 
 We choose _degree_ $d \in \{1, 3\}$ and the number of equi-spaced _knots_ $q \in \{3, 10\}$ where $\{\xi_j\}_{j=1}^q \in (0, 1)$.
 
@@ -105,12 +133,193 @@ text(0.88, 1, expression(xi[9] == 0.81), cex = 0.8)
 ```
 Now, let's have a look at what changes when we increase the degree to $d=3$. For simplicity, let's choose $q=3$.
 
-rifare plots con x, x**2, x**3 + i tre knots
+```{r basis d equal to 3 and q equal to 3, echo=FALSE, fig.align= 'center'}
 
-\
+q <- 3
+d <- 3
 
-#### 1.2.2 ...**ChatGPT**'s reply
+knots <- seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
 
+plot(NULL, xlim = c(0, 1), ylim = c(0, 1), xlab = 'x', ylab = expression(g[i](x)), main = "Truncated power basis with d=3 & q=3")
+cols <- c("orchid", "purple", "blue")
+curves <- list()
+for(i in 1:d){
+  curves[[i]] <- function(x) x**i
+}
+for (i in 1:length(curves)) {
+  curve(curves[[i]](x), add = TRUE, col = cols[[i]], lwd = 2)
+  abline(v = knots[i], lty = 2)
+}
+
+
+for(i in 1:length(knots)){
+  curves[[i]] <- function(x, k = knots) pmax((x - k[i]), 0)**d
+}
+cols <- c( "darkblue", "cornflowerblue", 5)
+for (i in 1:length(curves)) {
+  curve(curves[[i]](x), add = TRUE, col = cols[[i]], lwd = 2)
+  abline(v = knots[i], lty = 2)
+}
+
+legend("topleft", legend = c(expression(g[1](x)),
+                             expression(g[2](x)),
+                             expression(g[3](x)),
+                             expression(g[4](x)),
+                             expression(g[5](x)),
+                             expression(g[6](x))),
+       col = c("orchid", "purple", "blue", "darkblue", "cornflowerblue", 5), lwd = 3, cex=1, bg = 'white')
+text(0.32, 1, expression(xi[1] == 0.25), cex = 0.8)
+text(0.56, 1, expression(xi[2] == 0.50), cex = 0.8)
+text(0.82, 1, expression(xi[3] == 0.75), cex = 0.8)
+
+```
+
+### 1.2.2 ...**ChatGPT**'s reply (purely copy and paste)
+
+#### Version 1
+
+We asked **ChatGPT** to perform the task of computing and plot the truncated power basis $\textit{G}_{d,q}$. We started with a general version of the task: 
+"Can you create and plot the truncated power function in R?"\
+
+The _answer_ was: "Certainly! I can guide you on how to create and plot a truncated power function in R. The truncated power function is defined as:\
+
+f(x) = (x^a) / (1 + x^a)\
+
+where 'a' is the exponent parameter. To create and plot this function, you can follow the steps below:"
+
+```{r}
+#install.packages("ggplot2")  # If not already installed
+library(ggplot2)
+truncated_power <- function(x, a) {
+  (x^a) / (1 + x^a)
+}
+x <- seq(0.01, 10, by = 0.01)  # Generate x-values from 0.01 to 10
+a <- 2  # Exponent parameter
+y <- truncated_power(x, a)  # Calculate y-values
+data <- data.frame(x = x, y = y)
+
+```
+
+And returned the following plot:\
+
+```{r, echo=FALSE, fig.align='center'}
+ggplot(data, aes(x = x, y = y)) +
+  geom_line() +
+  labs(x = "x", y = "f(x)") +
+  ggtitle("Truncated Power Function") +
+  theme_minimal()
+```
+
+#### Version 2
+
+Then we experimented with a more specific version of the same question
+"Can you implement the truncated power basis function and plot it in R with degree equal to 1 and number of knots equal to 3?"\
+
+The _answer_ was:
+"Certainly! The truncated power basis function is a commonly used basis function in regression analysis. It is defined as a piecewise function that consists of power functions with different truncation points (knots).\
+
+To implement and plot the truncated power basis function in R with a degree of 1 and 3 knots, you can use the `bs()` function from the splines package. Here's an example code:"\
+
+```{r}
+
+# Install and load the required package
+# install.packages("splines")
+library(splines)
+
+# Define the number of knots and degree
+num_knots <- 3
+degree <- 1
+
+# Generate a sequence of x values
+x <- seq(0, 1, length = 100)
+
+# Create the truncated power basis function
+basis <- bs(x, knots = quantile(x, probs = seq(0, 1, length = num_knots + 2)), degree = degree, intercept = TRUE)
+
+```
+
+Also the code for the plot was added:\
+
+```{r, echo=FALSE,  fig.align='center'}
+
+# Plot the basis function
+plot(x, basis[, 1], type = "l", xlab = "x", ylab = "Basis Function", main = "Truncated Power Basis Function (Degree = 1, Knots = 3)")
+
+# Add lines for the remaining basis functions
+for (i in 2:(degree + 1)) {
+  lines(x, basis[, i], col = i)
+}
+
+# Add a legend
+legend("topright", legend = c("Basis 1", paste0("Basis ", 2:(degree + 1))), col = 1:(degree + 1), lty = 1)
+```
+
+#### Version 3
+
+Finally, we asked ChatGPT to perform the same task as before but without using any specific `R` packages, changing also the degree and number of knots, with the following question:
+"Can you implement the truncated power basis function and plot it in R with degree equal to 3 and number of knots equal to 10 without using packets?"\
+
+The _answer_ was:
+"Certainly! To implement the truncated power basis function and plot it in R without using external packages, you can create a custom function that calculates the basis function values for given input values. Here's an example code:"\
+
+```{r}
+
+# Define the number of knots and degree
+num_knots <- 10
+degree <- 3
+
+# Generate a sequence of x values
+x <- seq(0, 1, length = 100)
+
+# Function to calculate truncated power basis function values
+truncated_power_basis <- function(x, knots, degree) {
+  basis <- matrix(0, nrow = length(x), ncol = degree + 1)
+  basis[, 1] <- 1
+  
+  for (i in 2:(degree + 1)) {
+    basis[, i] <- pmax(0, x - knots[i - 1])^degree
+    basis[, i] <- basis[, i] - pmax(0, x - knots[num_knots])^degree
+    basis[, i] <- basis[, i] / (knots[num_knots] - knots[i - 1])
+  }
+  
+  return(basis)
+}
+
+# Generate the knots
+knots <- seq(0, 1, length = num_knots + 2)
+
+# Calculate the basis function values
+basis <- truncated_power_basis(x, knots, degree)
+
+```
+
+```{r, echo=FALSE, fig.align='center'}
+
+# Plot the basis function
+plot(x, basis[, 1], type = "l", xlab = "x", ylab = "Basis Function", main = "Truncated Power Basis Function (Degree = 3, Knots = 10)")
+
+# Add lines for the remaining basis functions
+for (i in 2:(degree + 1)) {
+  lines(x, basis[, i], col = i)
+}
+
+# Add a legend
+legend("topright", legend = c("Basis 1", paste0("Basis ", 2:(degree + 1))), col = 1:(degree + 1), lty = 1)
+
+```
+
+'This code will generate a plot of the truncated power basis function with a degree of 3 and 10 knots. The x-axis represents the input values, and the y-axis represents the value of the basis function at each x value. The plot will show multiple lines, each corresponding to a different basis function.\
+
+Note that in this implementation, we calculate the basis function values manually using the truncated power basis formula. The `truncated_power_basis()` function takes the input values `x`, the knots, and the degree as arguments, and returns a matrix containing the basis function values for each input value.'\
+
+From the various tests performed, it is evident that the **ChatGPT** bot does not always reply with correct information and is dependent on the way the question is asked. For instance, look at the huge difference between the first answer, which was a very general reply on truncated power basis functions, and the others where a more specific question was provided. Therefore we can deduce that, in order to exploit this medium properly, it is necessary that we ask very specific questions which are already directed towards the desired answer, while being alert to the presence of errors (we cannot just fully trust ChatGPT!). Moreover, it is evident that the plots are not as detailed as they should be (when coded by humans), and that what Chat' returns can only be used as a basis for asking other questions or as an input for seeking help from more reliable resources. We are not saying that ChatGPT is totally useless as it still may provide some useful hints for: reasoning when starting completely from scratch, understanding how to use certain libraries, times when getting an answer in a very short time is preferable over quality content. All questions/answers that can allow us to get a better idea on how to proceed (or how not to proceed...).
+
+Then we asked Chat GPT an opinion about it and eventually it confirmed what we stated above:
+"What do you think of the service you provide?"\
+
+This was "its" reply:\
+
+"As an AI language model, I don't have personal opinions or subjective experiences. However, I can provide information and assistance on a wide range of topics. My purpose is to assist users in generating human-like text based on the input provided to me. The effectiveness and usefulness of the service I provide can vary depending on the specific use case and the quality of the input given to me. It's important to remember that while I strive to be helpful and accurate, I am an AI and may not always provide perfect or flawless responses. It's always a good idea to verify information from multiple sources and use critical thinking when interpreting the outputs."
 
 ### 1.3 Our very first Kaggle competition
 
@@ -122,6 +331,7 @@ library(glmnet)
 library(elasticnet)
 library(doParallel)
 library(dplyr)
+library(lmtest)
 ```
 
 
@@ -141,7 +351,7 @@ test <- read.csv('test.csv')
 ```
 
 
-### 1.3.1 Equi-spaced knots
+### 1.3.1 Equi-spaced knots {#equi}
 
 In this section we aim at fining the "best" $(d, q)$-combination, firstly via plain old vanilla k-fold cross validation, and secondly by implementing Bates' nested cross validation algorithm.
 
@@ -207,14 +417,16 @@ bestmodel <- function(qmax=1, dmax=1, train_x, train_y, pos = 'equi', w){
       dist <- dist(train_y)
       hc <- hclust(dist)
       hc_labels <- cutree(hc, k = q)
-      knots <-
+      knots <- 
         sort(unlist(lapply(1:q, function(i)
           mean(train_x[hc_labels == i]))))
+      knots <- sort(append(knots, 0.26))
       knots_pos[[q]] <- knots
     }
     else{
       knots <- knots_pos[[q]]
     }
+    
     X <- remap(d, q, knots, train_x)
     train_data <- data.frame(cbind(X, "y" = train_y))
     train.control <- trainControl(method = "cv", 
@@ -293,8 +505,21 @@ text(0.94, 22000, expression(p[1]), cex = 0.8)
 text(0.95, 26500, expression(p[2]), cex = 0.8)
 
 ```
+Outliers can have an impact on _homoscedasticity_, which refers to the assumption that the variability of errors (or residuals) is constant across different levels of the predictor variables. In `R`, we can check for heteroscedasticity among residuals by performing the `Breusch-Pagan Test`. The hypothesis of `BP test` are:
 
-Instead of just getting rid of all outliers, we can just remove the two farthermost points $p_1$ and $p_2$ in the plot and weight less those outliers when training the model. The `weights` vector can be passed directly to the `weights` parameter of `caret`'s `train` function. We set all weights to 1 except for outliers observations whose weights equal 0.5.
+- Null hypothesis: $H_0 =$ residuals are distributed with equal variance (homoscedasticity)
+- Alternative hypothesis: $H_1 =$ residuals are distributed with unequal variance (heteroscedasticity)
+
+Here, the output of this `Breusch-Pagan Test` has a high test statistic ($BP=77.559$) and $\text{p-value} < 2.2e^{-16}$. Therefore, we can reject $H_0$ and conclude that the `train` data is indeed heteroscedastic.
+
+```{r heteroscedasticity}
+
+model <- lm(train$y~train$x)
+lmtest::bptest(model)
+
+```
+
+Now, how should we deal with _heteroscedasticity_? Instead of just getting rid of all outliers, we can just remove the two farthermost points ($p_1$ and $p_2$ in the plot) and weight less the remaining outliers when training the model. The `weights` vector can be passed directly to the `weights` parameter of `caret`'s `train` function. We set all weights to 1 except for outliers observations whose weights equal 0.5.
 
 ```{r outliers dealing}
 
@@ -311,11 +536,11 @@ for (row in 1:nrow(train)) {
 
 ### Run the `bestmodel` function
 
-Let's set `qmax = 50` and `dmax = 3`.
+Let's set `qmax = 40` and `dmax = 3`.
 
 ```{r model1}
 
-res <- bestmodel(qmax=50, dmax=3, x_train, y_train, pos='equi', w=weights)
+res <- bestmodel(qmax=40, dmax=3, x_train, y_train, pos='equi', w=weights)
 
 idx_min = res[[1]]
 d_best = idx_min$Var1
@@ -332,23 +557,30 @@ idx_min
 
 ```
 
-The best model according to vanilla cv is the one having `d=1` and `q=50`. That's an awful lot of knots. The cross validation`rmse` equals approximately `2689`, the training set error equals `2537` compared to the public leaderboard test set score of ... RIEMPIRE (submission 12)
+The best model according to vanilla cv is the one having `d=1` and `q=40`. That's an awful lot of knots. The cross validation`rmse` equals approximately `2738`, the training set error equals `2591` compared to the _public_ leaderboard test set score of `2729` (excluding the _private_ leaderboard results).
 
-```{r scores model1, eval=FALSE, include=FALSE}
+```{r scores model1}
 
 mod <- glmnet(X, train$y, alpha = alpha_min, lambda = lambda_min,
                   family = "gaussian")
 y_pred <- predict(mod, newx = X)
-sqrt(mean((train$y - y_pred)**2))
+paste('rmse on the training set:', round(sqrt(mean((train$y - y_pred)**2)), 2))
+paste('k-fold rmse:', round(sqrt(mse_min), 2))
 
 ```
 
-Let's have a look at the plot of the fit.
+Let's have a look at the plot of the fit. We can clearly see that, as we expected from the extreme amount of knots, our model is fitting to noise fluctuations (especially for $x > 0.9$).
 
 ```{r plot model1, echo=FALSE, fig.align='center'}
 
+y_pred <- prediction(res, train, test)
+y <- data.frame("target" = y_pred)
+colnames(y) <- c('target')
+df <- data.frame(cbind("id"=test$id, y))
+write.csv(df, 'submission12.csv', row.names = F)
+
 plot(train$x, train$y, col=adjustcolor("magenta", 0.4), pch = 19,
-     main = 'd = 1 & q = 50', xlab = 'x', ylab = 'y')
+     main = 'd = 1 & q = 40', xlab = 'x', ylab = 'y')
 points(train$x, train$y)
 y_pred <- prediction(res, train, test)
 points(test$x, y_pred, col = "orange", pch = 19)
@@ -359,7 +591,9 @@ abline(v=knots, lty=2)
 
 ### Bates' et al. Nested CV
 
-!!!explain what problem nested cv wants to solve
+Vanilla CV (k-fold) is fine, but it can still lead to overfitting due to not accounting for the correlation between the data points used to train the model and ones belonging to the validation fold. Therefore, the errors computed on the different k folds are also correlated.
+Nested CV tries to tackle the correlation issue hence providing a more reliable confidence interval around the errors, allowing us to choose a more generalizable model which also accounts for model complexity. Since we believe that the model chosen by the plain old vanilla cv is too complex, we would like to test the nested cv approach to choose a simpler model which, in turn, should also reduce overfitting.
+
 
 `inner_crossval` performs k-fold cross validation. Precisely, we
 
@@ -370,8 +604,8 @@ abline(v=knots, lty=2)
 
 ```{r inner loop}
 
-inner_crossval <- function(d=1, q=1, K=10, knots,
-                           out_folds, data, kout, pos='equi'){
+inner_crossval <- function(d=1, q=1, K=10, knots, out_folds,
+                           data, kout, pos='equi'){
     e_in <- c()
     kval <- 1:K
     for(k in kval[kval!=kout]){
@@ -380,18 +614,7 @@ inner_crossval <- function(d=1, q=1, K=10, knots,
         temp <- data[-idx, ] # do not consider validation data
         idx_out <- which(out_folds==kout,arr.ind=TRUE)
         in_train <- temp[-idx_out, ] # do not consider holdout data
-        if(pos=='cluster'){
-            dist <- dist(in_train$y)
-            hc <- hclust(dist)
-            hc_labels <- cutree(hc, k = q)
-            knots_train <-
-              sort(unlist(lapply(1:q, function(i)
-                mean(in_train$x[hc_labels == i]))))
-        }
-        else{
-            knots_train <- knots
-        }                                   
-        X <- remap(d, q, knots_train, in_train$x)
+        X <- remap(d, q, knots, in_train$x)
         model <- glmnet(X, in_train$y, alpha=0)
         Xval <- remap(d, q, knots, val$x)
         y_pred <- predict(model, newx=Xval)
@@ -415,8 +638,8 @@ inner_crossval <- function(d=1, q=1, K=10, knots,
 
 ```{r outer loop}
 
-outer_crossval <- function(d=1, q=1, K=10, knots,
-                           out_folds, data=data, pos='equi'){
+outer_crossval <- function(d=1, q=1, K=10, knots, out_folds,
+                           data=data, pos='equi'){
     es <- c()
     a_list <- c()
     b_list <- c()
@@ -426,18 +649,7 @@ outer_crossval <- function(d=1, q=1, K=10, knots,
         training <- data[-idx, ] # specify training
         res_in <- inner_crossval(d, q, K, knots, out_folds, data=data, kout=kout)
         e_in <- res_in[[1]]
-        if(pos=='cluster'){
-            dist <- dist(training$y)
-            hc <- hclust(dist)
-            hc_labels <- cutree(hc, k = q)
-            knots_train <-
-              sort(unlist(lapply(1:q, function(i)
-                mean(training$x[hc_labels == i]))))
-        }
-        else{
-            knots_train <- knots
-        } 
-        Xtrain <- remap(d, q, knots_train, training$x)
+        Xtrain <- remap(d, q, knots, training$x)
         Xout <- remap(d, q, knots, holdout$x)
         model <- glmnet(Xtrain, training$y, alpha=0)
         y_pred <- predict(model, newx=Xout)
@@ -463,15 +675,14 @@ nested_cv <- function(d=1, q=1, K=10, knots, train, R=5, pos='equi'){
     a_list <- c()
     b_list <- c()
     es <- c()
-    pb <- txtProgressBar(min = 0, max = R, style = 3) 
     for(r in 1:R){
         data <- train[sample(nrow(train)),]
         outer_folds <- cut(seq(1,nrow(data)), breaks=K, labels=FALSE)
-        res <- outer_crossval(d, q, K, knots, out_folds=outer_folds, data=data)
+        res <- outer_crossval(d, q, K, knots, out_folds=outer_folds,
+                              data=data)
         es <- append(es, res[[1]])
         a_list <- append(a_list, res[[2]])
         b_list <- append(b_list, res[[3]])
-        setTxtProgressBar(pb, r)
     }
     MSE <- mean(a_list) - mean(b_list)
     Err <- mean(es)
@@ -480,32 +691,30 @@ nested_cv <- function(d=1, q=1, K=10, knots, train, R=5, pos='equi'){
 
 ```
 
-We set `R = 10`, `K = 10` and run the `nested_cv` function.
+We set `R = 50`, `K = 10` and run the `nested_cv` function. The purpose of this procedure is to estimate the $MSE$ of the "best" model (i.e., the one yielding the lowest `rmse`) to roughly apply the 1-SE rule, which in our case is the 1-$\sqrt{\widehat{MSE}}$ rule.
 
 ```{r run nested cv}
 
-ncv_res <- nested_cv(d=d_best, q=q_best, K=10, knots=knots, train, R=100, pos='equi')
+ncv_res <- nested_cv(d=d_best, q=q_best, K=10, knots=knots,
+                     train, R=50, pos='equi')
 
 ```
 
-```{r}
+```{r mse qrt model2}
 
 MSE_sqrt <- sqrt(ncv_res[[1]])
 upper_bound <- mse_min + MSE_sqrt
-print(sqrt(upper_bound))
+print(paste('MSE Upper bound U:', round(upper_bound, 2),
+            '- RMSE Upper bound U:', round(sqrt(upper_bound), 2)))
 rmse_list <- round(sqrt(mse_list), 2)
-rmse_list
 
 ```
 
-`genmodel`
-
-### Now, we select the _simplest_ model having $MSE \leq U(MSE\_min)$
-#### Note: by simplest model we mean the model having less features ($d$+$q$)
+`genmodel` selects the _simplest_ model having $Err_{CV} \leq U(Err_{bestmodel})$ where $U(\cdot)$ is the upper bound of the confidence interval $\Bigg( Err_{bestmodel} \pm \sqrt{\widehat{MSE}}\Bigg)$. `Note`: By simplest model we refer to the model having less features ($d+q$).
 
 ```{r generalized model}
 
-genmodel <- function(qmax=1, mse_list, upper_bound){
+genmodel <- function(qmax=1, mse_list, upper_bound, pos='equi'){
     D <- c(1, 3)
     Q <- 1:qmax
     combinations <- data.frame(expand.grid(D, Q))
@@ -514,6 +723,9 @@ genmodel <- function(qmax=1, mse_list, upper_bound){
     for(model in 1:length(mse_list)){
         d = combinations[model, 1]
         q = combinations[model, 2]
+        if(pos == 'cluster'){
+          q = q+1
+        }
         if((mse_list[model] <= upper_bound) & (d+q <= d_gen+q_gen)){
             d_gen = d
             q_gen = q
@@ -524,23 +736,36 @@ genmodel <- function(qmax=1, mse_list, upper_bound){
 
 ```
 
-```{r}
+```{r get generalized model2}
 
 D <- c(1, 3)
 Q <- 1:50
 combinations <- data.frame(expand.grid(D, Q))
 d_gen <- genmodel(50, mse_list, upper_bound)[[1]]
 q_gen <- genmodel(50, mse_list, upper_bound)[[2]]
-row <- rownames(subset(combinations, combinations$Var1 == d_gen & combinations$Var2 == q_gen))
+row <- rownames(subset(combinations,
+                       combinations$Var1 == d_gen & combinations$Var2 == q_gen))
 X <- res[[2]][[as.integer(row)]]
 knots <- res[[4]][[q_gen]]
 alpha = res[[5]][as.integer(row)]
 lambda = res[[6]][as.integer(row)]
-d_gen
-q_gen
+print(paste('Chosen d:', d_gen, '& Chosen q:', q_gen))
+
 ```
 
-```{r}
+The best model according to he nested cv approach is the one having `d=1` and `q=9`. Clearly, the number of chosen knots is much smaller than the one chosen by the `bestmodel` function. Here, the cross validation `rmse` equals approximately `2738`, the training set error equals `2752` compared to the _public_ leaderboard test set score of `3327` (excluding the _private_ leaderboard results).
+
+```{r scores model2}
+
+mod <- glmnet(X, train$y, alpha = alpha, lambda = lambda,
+                  family = "gaussian")
+y_pred <- predict(mod, newx = X)
+paste('rmse on the training set:', round(sqrt(mean((train$y - y_pred)**2)), 2))
+paste('k-fold rmse:', round(sqrt(mse_min), 2))
+
+```
+
+```{r prediction2, echo=FALSE}
 
 train_data <- data.frame(cbind(X, "y" = train$y))
 colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
@@ -548,9 +773,23 @@ mod <- glmnet(X, train$y, alpha = alpha, lambda = lambda, family = "gaussian", w
 Xtest = remap(d_gen, q_gen, knots, test$x)
 y_pred <- predict(mod, newx = Xtest)
 
-plot(train$x, train$y)
-points(test$x, y_pred, col = "red")
-abline(v=knots)
+```
+
+* explain plot.
+
+```{r plot model2, echo=FALSE, fig.align='center'}
+
+y <- data.frame("target" = y_pred)
+colnames(y) <- c('target')
+df <- data.frame(cbind("id"=test$id, y))
+write.csv(df, 'submission13.csv', row.names = F)
+
+plot(train$x, train$y, col=adjustcolor("magenta", 0.4), pch = 19,
+     main = 'd = 1 & q = 9', xlab = 'x', ylab = 'y')
+points(train$x, train$y)
+points(test$x, y_pred, col = "orange", pch = 19)
+points(test$x, y_pred, col = "orangered2")
+abline(v=knots, lty=2)
 
 ```
 
@@ -558,35 +797,184 @@ abline(v=knots)
 
 ### Vanilla Cross-Validation: K-fold CV
 
-the functions have already been listed before just explain how we choose the knots and show model performance.
+The functions and procedures have already been explained in the previous [section](#equi). The only difference regards the positioning of the knots along `x`. For instance, in the `bestmodel` function we can pass as input `pos=cluster` which chooses the knots positions through hierarchical clustering on the distance matrix `dist` calculated from the `train$y` variable. It then assigns cluster labels `hc_labels` to the observations based on cutting the hierarchical clustering tree into `k = q` clusters. Finally, it calculates the mean of `train$x` for each cluster (knot), sorted in ascending order which corresponds to the positioning of the knot. However, we decided to always add a knot in position $x \approx 0.26$ which is approximately the abscissa of the main bump. 
 
-```{r}
+```{r add knot}
 
-
-```
-
-```{r}
-
+sub <- subset(train, train$x < 0.3)
+max_idx <- which.max(sub$y)
+sub[max_idx, 2]
 
 ```
 
-```{r}
+### Run the `bestmodel` function
 
+Let's set `qmax = 40` and `dmax = 3`.
+
+```{r model3}
+
+res <- bestmodel(qmax=40, dmax=3, x_train, y_train, pos='cluster', w=weights)
+
+idx_min = res[[1]]
+d_best = idx_min$Var1
+q_best = idx_min$Var2+1
+X = res[[2]][[as.integer(rownames(idx_min))]]
+mse_list = res[[3]]**2
+mse_min = mse_list[as.integer(rownames(idx_min))]
+knots = res[[4]][[q_best]]
+alphas = res[[5]]
+lambdas = res[[6]]
+alpha_min = res[[5]][as.integer(rownames(idx_min))]
+lambda_min = res[[6]][as.integer(rownames(idx_min))]
+paste('d best:', d_best, '& q_best:', q_best)
+
+```
+
+The best model according to vanilla cv is the one having `d=1` and `q=38`. It's still an horrible amount of knots (like in the equispaced case). The cross validation`rmse` equals approximately `2753`, the training set error equals `2511` compared to the _public_ leaderboard test set score of `2926` (excluding the _private_ leaderboard results).
+
+```{r scores model3}
+
+mod <- glmnet(X, train$y, alpha = alpha_min, lambda = lambda_min,
+                  family = "gaussian")
+y_pred <- predict(mod, newx = X)
+paste('rmse on the training set:', round(sqrt(mean((train$y - y_pred)**2)), 2))
+paste('k-fold rmse:', round(sqrt(mse_min), 2))
+
+```
+
+Let's have a look at the plot of the fit. We can clearly see that, also in this case, as we expected from the extreme amount of knots, our model is fitting to noise fluctuations (especially for $x > 0.9$). This behaviour is accentuated in the clustered case as the majority of knots are situated in the noiser portion of data.
+
+```{r plot model3, echo=FALSE, fig.align='center'}
+
+y_pred <- prediction(res, train, test)
+y <- data.frame("target" = y_pred)
+colnames(y) <- c('target')
+df <- data.frame(cbind("id"=test$id, y))
+write.csv(df, 'submission15.csv', row.names = F)
+
+plot(train$x, train$y, col=adjustcolor("magenta", 0.4), pch = 19,
+     main = 'd = 1 & q = 38', xlab = 'x', ylab = 'y')
+points(train$x, train$y)
+y_pred <- prediction(res, train, test)
+points(test$x, y_pred, col = "orange", pch = 19)
+points(test$x, y_pred, col = "orangered2")
+abline(v=knots, lty=2)
 
 ```
 
 ### Bates' et al. Nested CV
 
-```{r}
+Also in the clustered-case we apply nested cross validation to find a simpler model. We set `R = 50`, `K = 10` and run the `nested_cv` function.
 
+```{r run nested cv cluster knots}
+
+ncv_res <- nested_cv(d=d_best, q=q_best, K=10, knots=knots, train, R=50)
 
 ```
+
+```{r mse qrt model4}
+
+MSE_sqrt <- sqrt(ncv_res[[1]])
+upper_bound <- mse_min + MSE_sqrt
+print(paste('MSE Upper bound U:', round(upper_bound, 2),
+            '- RMSE Upper bound U:', round(sqrt(upper_bound), 2)))
+rmse_list <- round(sqrt(mse_list), 2)
+
+```
+```{r get generalized model4}
+
+D <- c(1, 3)
+Q <- 1:50
+combinations <- data.frame(expand.grid(D, Q))
+gen_res <- genmodel(50, mse_list, upper_bound, pos='cluster')
+d_gen <- gen_res[[1]]
+q_gen <- gen_res[[2]]
+row <- rownames(subset(combinations,
+                       combinations$Var1 == d_gen & combinations$Var2 == q_gen))
+X <- res[[2]][[as.integer(row)]]
+knots <- res[[4]][[q_gen]]
+alpha = res[[5]][as.integer(row)]
+lambda = res[[6]][as.integer(row)]
+print(paste('Chosen d:', d_gen, '& Chosen q:', q_gen))
+
+```
+
+The best model according to he nested cv approach is the one having `d=1` and `q=5`. Clearly, the number of chosen knots is much smaller than the one chosen by the `bestmodel` function. Here, the cross validation `rmse` equals approximately `2753`, the training set error equals `2750` compared to the _public_ leaderboard test set score of `3327` (excluding the _private_ leaderboard results).
+
+```{r scores model4}
+
+mod <- glmnet(X, train$y, alpha = alpha, lambda = lambda,
+                  family = "gaussian")
+y_pred <- predict(mod, newx = X)
+paste('rmse on the training set:', round(sqrt(mean((train$y - y_pred)**2)), 2))
+paste('k-fold rmse:', round(sqrt(mse_min), 2))
+
+```
+
+```{r prediction4, echo=FALSE}
+
+train_data <- data.frame(cbind(X, "y" = train$y))
+colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
+mod <- glmnet(X, train$y, alpha = alpha, lambda = lambda, family = "gaussian", weights=weights)
+Xtest = remap(d_gen, q_gen, knots, test$x)
+y_pred <- predict(mod, newx = Xtest)
+
+```
+
+* explain plot.
+
+```{r plot model4, echo=FALSE, fig.align='center'}
+
+y <- data.frame("target" = y_pred)
+colnames(y) <- c('target')
+df <- data.frame(cbind("id"=test$id, y))
+write.csv(df, 'submission16.csv', row.names = F)
+
+plot(train$x, train$y, col=adjustcolor("magenta", 0.4), pch = 19,
+     main = 'd = 1 & q = 5', xlab = 'x', ylab = 'y')
+points(train$x, train$y)
+points(test$x, y_pred, col = "orange", pch = 19)
+points(test$x, y_pred, col = "orangered2")
+abline(v=knots, lty=2)
+
+```
+
 
 ### Conclusion
 
 \newpage
 
 # Part II
+
+## Question 1
+
+From our point of view the emergence of language models such as Chat Gpt and their massive diffusion are leading to the arising of a whole series of problems related to their use, ranging from ethics to information, to privacy and all the potential effects of its further and rapid development. 
+First of all since these models are dependent on training data, if these have discriminatory tendencies towards certain
+categories, there could be questionable results that however reflect human social issues of the present. Nevertheless this further consequences that this could have at the level of AI could not be ignore. Therefore, it would be necessary to regulate carefully the data selection to train this models to prevent it from contributing to the persistence of such discriminations.
+An example of this, related more in general to AI is [The documentary Coded Bias](https://www.codedbias.com), which discloses the observations made by MIT researcher Joy Buolamwini who observed how many facial recognition technologies do not accurately detect darker-skinned faces or classify the faces of women, 'inheriting' in some way human prejudices.
+Considering that prejudices are strictly interconnected to fake news, this aspect is closely linked to the issue of information in the sense that generative models risk leading to the creation of false information, creating in some sense false knowledge. In particular, GPT being driven by web data, which is the realm of false information in itself, this aspect is extremely pronounced.
+On the other hand, the idea that this data can be controlled and filtered could be 
+a controversial aspect when it leads to the generation from information polarized by ideologies. Therefore, in order to maintain a democratic aspect, it would be necessary to set limits and trying to keep neutrality as much as possible but that is not as simple as it could be seen. Indeed, the possibility of restricting access to these tools by the entire world population is also a very controversial topic.
+
+Another aspect to consider is the role of these bots in education and among the young; while it can be a tool to help you be more productive and concentrate on other tasks,  the speed and ease with which they can provide text customized to the to the question asked inevitably leads to greater possibilities
+of cheating, preventing the student from applying himself from scratch in learning activities.
+Moreover, from a future perspective, the presence of increasingly complex interactive models could threaten or in any case bring about a change in the role of teachers. More in general it is a factor of concern that these bots it may replace other kind human activities by decreasing the employment of human beings. This irrational fear is quite widespread, but it's not a new reaction, since is a constant with respect to innovation that already was present in the past and influenced media with the creation of worlds in which human beings were replaced by AI's or the seizure of power by armies of robots. Beyond dystopic imaginaries, it is concretely necessary to question the capabilities of these tools to go beyond training data (as highlighted in the same GPT4 technical report) and develop further abilities which were not predictable. In conclusion, we think it is necessary to try to understand the potential of what is being created through the knowledge we have, without interfering with its development, but we believe it is more urgent to regulate it in the present, considering the effects that the massive diffusion of these tools could have and also the improper uses that could be made of it.
+
+\
+\
+\
+\
+\
+
+Our job here is done :)
+
+\
+\
+
+```{r, fig.align='center', out.width='450px', out.height='200px', echo=FALSE}
+knitr::include_graphics("final.jpeg")
+```
+
 
 
 
