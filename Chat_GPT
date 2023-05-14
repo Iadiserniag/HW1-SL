@@ -9,7 +9,7 @@ f(x) = (x^a) / (1 + x^a)\
 
 where 'a' is the exponent parameter. To create and plot this function, you can follow the steps below:'\
 ```{r}
-install.packages("ggplot2")  # If not already installed
+#install.packages("ggplot2")  # If not already installed
 library(ggplot2)
 truncated_power <- function(x, a) {
   (x^a) / (1 + x^a)
@@ -22,7 +22,7 @@ data <- data.frame(x = x, y = y)
 
 ```
 
-
+And returned the following plot:\
 
 ```{r, echo=FALSE}
 ggplot(data, aes(x = x, y = y)) +
@@ -58,7 +58,7 @@ basis <- bs(x, knots = quantile(x, probs = seq(0, 1, length = num_knots + 2)), d
 
 ```
 
-Also the code for the plot was added:
+Also the code for the plot was added:\
 
 ```{r , echo=FALSE}
 # Plot the basis function
@@ -113,9 +113,6 @@ basis <- truncated_power_basis(x, knots, degree)
 ```
 
 
-
-
-
 ```{r}
 
 
@@ -132,7 +129,7 @@ legend("topright", legend = c("Basis 1", paste0("Basis ", 2:(degree + 1))), col 
 
 ```
 
-This code will generate a plot of the truncated power basis function with a degree of 3 and 10 knots. The x-axis represents the input values, and the y-axis represents the value of the basis function at each x value. The plot will show multiple lines, each corresponding to a different basis function.\
+'This code will generate a plot of the truncated power basis function with a degree of 3 and 10 knots. The x-axis represents the input values, and the y-axis represents the value of the basis function at each x value. The plot will show multiple lines, each corresponding to a different basis function.\
 
 Note that in this implementation, we calculate the basis function values manually using the truncated power basis formula. The truncated_power_basis() function takes the input values x, the knots, and the degree as arguments, and returns a matrix containing the basis function values for each input value.'\
 
