@@ -2,6 +2,8 @@
 library(caret)
 library(glmnet)
 library(elasticnet)
+# install.packages('nestedcv')
+library(nestedcv)
 
 train <- read.csv('train.csv')
 test <- read.csv('test.csv')
@@ -1010,7 +1012,7 @@ for(r in 1:R){ # number of repetitions (repeated ncv)
     train_df <- data.frame(cbind(X, "y" = training_data$y))
     train.control <- trainControl(method = "cv", 
                                   number = K-1) # on remaining K-1 folds
-    my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 10))
+    my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length = 50))
     model <- train(form = y ~. , data = train_df, method = "glmnet",
                    trControl = train.control, metric = "RMSE", tuneGrid = my_grid,
                    list = TRUE, returnResamp = "all", summaryFunction = defaultSummary)
@@ -1080,6 +1082,8 @@ bestmodel_ncv <- function(qmax=1, dmax=1, train, pos = 'equi', k_out=5, k_in=5){
   features <- list()
   train_x = train$x
   train_y = train$y
+  data <- train[sample(nrow(train)),]  # Randomly shuffle the data
+  outer_folds <- cut(seq(1,nrow(data)), breaks=k_out, labels=FALSE) # create folds
   if(pos == 'equi'){
     knots_pos = lapply(Q, function(q)seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))
   }
@@ -1100,8 +1104,6 @@ bestmodel_ncv <- function(qmax=1, dmax=1, train, pos = 'equi', k_out=5, k_in=5){
     else{
       knots <- knots_pos[[q]]
     }
-    data <- train[sample(nrow(train)),]  # Randomly shuffle the data
-    outer_folds <- cut(seq(1,nrow(data)), breaks=k_out, labels=FALSE) # create folds
     rmse[row] <- nestedCV(d=d, q=q, k_out = k_out, k_in = k_in, outer_folds = outer_folds)
     X <- remap(d, q, knots, train_x)
     features <- append(features, list(X))
@@ -1110,6 +1112,7 @@ bestmodel_ncv <- function(qmax=1, dmax=1, train, pos = 'equi', k_out=5, k_in=5){
   idx_min <- combinations[which.min(rmse),]
   return(list(idx_min, features, rmse, knots_pos, alpha_values, lambda_values))
 }
+
 
 # testing
 set.seed(1234)
@@ -1148,6 +1151,104 @@ rmse
 # plot the fit on test data on top of training data
 plot(train$x, train$y)
 points(test$x, y_pred, col="red")
+abline(v=knots)
+
+### Module ------------------
+
+bestmodel_ncv <- function(qmax=1, dmax=1, train, pos = 'equi', k_out=10, k_in=5){
+  D <- c(1, 3) # exclude d=2
+  Q <- 1:qmax
+  combinations <- data.frame(expand.grid(D, Q))
+  rmse <- c(rep(NA, nrow(combinations)))
+  alpha_values <- c(rep(NA, nrow(combinations)))
+  lambda_values <- c(rep(NA, nrow(combinations)))
+  knots_pos <- list()
+  features <- list()
+  train_x = train$x
+  train_y = train$y
+  if(pos == 'equi'){
+    knots_pos = lapply(Q, function(q)seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))
+  }
+  if(pos == 'quantile'){
+    knots_pos = lapply(Q, function(q) unname(quantile(train_x,
+                                                      probs = seq(1/(q+1), 1 - 1/(q+1), 1/(q+1)))))
+  }
+  for(row in 1:nrow(combinations)){
+    d = combinations[row, 1]
+    q = combinations[row, 2]
+    if(pos == 'cluster'){
+      dist <- dist(train_y)
+      hc <- hclust(dist)
+      hc_labels <- cutree(hc, k = q)
+      knots <- sort(unlist(lapply(1:q, function(i) mean(train_x[hc_labels == i]))))
+      knots_pos[[q]] <- knots
+    }
+    else{
+      knots <- knots_pos[[q]]
+    }
+    X <- remap(d, q, knots, train_x)
+    ncv_mod <- nestcv.glmnet(train$y, X, family = 'gaussian', outer_method = 'cv', 
+                             n_outer_folds = k_out, n_inner_folds = k_in)
+    alpha_values[row] <- unname(ncv_mod$final_param[1])
+    lambda_values[row] <- unname(ncv_mod$final_param[2])
+    rmse[row] <- unname(ncv_mod$summary[1])
+    features <- append(features, list(X))
+    print(row)
+  }
+  idx_min <- combinations[which.min(rmse),]
+  return(list(idx_min, features, rmse, knots_pos, alpha_values, lambda_values))
+}
+
+set.seed(1234)
+res <- bestmodel_ncv(30, 3, train, pos='cluster')
+
+
+d = 3
+q = 3
+knots <- seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
+X <- remap(d, q, knots, train$x)
+my_grid <- expand.grid(alpha = seq(0, 1, 0.1), lambda = seq(1e-3, 2, length=100))
+train_data <- data.frame(cbind(X, 'y' = train$y))
+colnames(train_data) <- c(paste0('X', 2:(ncol(train_data))-1), 'y')
+train.control <- trainControl(method = "cv", 
+                              number = 5)
+model <- nestcv.train(y=train$y, train_data[,1:ncol(train_data)-1], method = "glmnet",
+                      trControl = train.control, metric = "RMSE", tuneGrid = my_grid,
+                      n_outer_folds = 10, seed = 1234)
+
+# get final tune
+# summary --> rmse
+
+
+# best model hyperparameters
+idx_min = res[[1]]
+d = idx_min$Var1
+q = idx_min$Var2
+X = res[[2]][[as.integer(rownames(idx_min))]]
+rmse = res[[3]][as.integer(rownames(idx_min))]
+knots = res[[4]][[q]]
+alpha = res[[5]][as.integer(rownames(idx_min))]
+lambda = res[[6]][as.integer(rownames(idx_min))]
+
+d = 3
+q = 30
+dist <- dist(train$y)
+hc <- hclust(dist)
+hc_labels <- cutree(hc, k = q)
+knots <- sort(unlist(lapply(1:q, function(i) mean(train$x[hc_labels == i]))))
+X = remap(d, q, knots, train$x)
+
+# train the model + predict values on test set data
+train_data <- data.frame(cbind(X, "y" = train$y))
+colnames(train_data) <- c(paste0('X', 2:ncol(train_data)-1), 'y')
+mod <- glmnet(X, train$y, alpha=1)
+Xtest = remap(d, q, knots, test$x)
+y_pred <- predict(mod, newx = Xtest)
+y_train <- predict(mod, newx = X)
+
+# plot the fit
+plot(train$x, train$y)
+points(test$x, y_pred, col = "red")
 abline(v=knots)
 
 # YOUR JOB - PART2 --------------------
@@ -1241,3 +1342,48 @@ for (i in 1:(length(knots10) + 1)) {
 }
 
 legend(x = 0.02, y = 97, legend = c("Linear Function", "Cubic Function"), col = c("cornflowerblue", "violet"), lty = 1, lwd = 2, cex=0.8, box.lty=0)
+
+
+
+
+# trials -----------
+
+d=3
+q=3
+knots <- seq(1/(q+1), 1 - 1/(q+1), 1/(q+1))
+X <- remap(d, q, knots, train$x)
+cv <- cv.glmnet(X, train$y)
+bestlam <- cv$lambda.min
+model <- glmnet(X, train$y, alpha=1, lambda=bestlam)
+y_pred <- predict(model, newx=)
+
+e_in <- c(3)
+append(e_in, c(1, 2, 4))
+
+
+inner_crossval <- function(d=1, q=1, K=5, knots, outer_folds, training_data, kout=4){
+  e_in <- c()
+  kval <- 1:K
+  print(kout)
+  kin <- kval[kval!=kout]
+  print(kin)
+  for(k in kin){
+    print(k)
+    idx <- which(outer_folds==k,arr.ind=TRUE)
+    val <- training_data[idx, ]
+    in_train <- training_data[-idx, ]
+    X <- remap(d, q, knots, in_train$x)
+    cv <- cv.glmnet(X, in_train$y)
+    bestlam <- cv$lambda.min
+    model <- glmnet(X, in_train$y, alpha=1, lambda=bestlam)
+    Xval <- remap(d, q, knots, val$x)
+    y_pred <- predict(model, newx=Xval)
+    e_temp <- (y_pred - val$y)**2
+    e_in <- append(e_in, e_temp)
+  }
+  return(e_in)
+}
+
+inner_crossval(d, q, K, knots, outer_folds, training_data=train_data, kout=kout)
+
+
